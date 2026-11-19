@@ -65,11 +65,17 @@
 **Charts**, **Reports**, **Settings**.
 
 ### Desktop-приложение (Windows 10/11)
-Готовый установщик: `dist\installer\PDF-Analyst-Setup.exe` (один `.exe`, ~172 МБ).
+Готовый установщик **скачивается из [GitHub Releases](https://github.com/VadimKa456/PDF-Analyst/releases/latest)**:
+[`PDF-Analyst-Setup.exe`](https://github.com/VadimKa456/PDF-Analyst/releases/download/v1.1.0/PDF-Analyst-Setup.exe) (один `.exe`, ~172 МБ).
+
+> Каталоги `dist/` и `build/` намеренно **не хранятся в Git** (это артефакты сборки).
+> Исходники собираются локально командой `build_desktop.bat`; готовый бинарник
+> публикуется в разделе **Releases**, а не в репозитории.
+
 Приложение запускается в **собственном окне** (без браузера), данные хранятся в
 `%LOCALAPPDATA%\PDF Analyst\data`. Установщик проверяет и предлагает доустановить
 Edge WebView2 Runtime и Visual C++ Redistributable; для Tesseract OCR открывает
-страницу загрузки. Подробности — в `DESKTOP_BUILD.md`. Сборка: `build_desktop.bat`.
+страницу загрузки. Подробности — в `DESKTOP_BUILD.md`.
 
 ---
 

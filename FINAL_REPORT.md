@@ -244,9 +244,10 @@ npm run build
 
 ## 8. Desktop-сборка (Windows 10/11)
 
-- Готовый установщик: `dist\installer\PDF-Analyst-Setup.exe` (один `.exe`, ~172 МБ,
+- Готовый установщик опубликован в [GitHub Releases](https://github.com/VadimKa456/PDF-Analyst/releases/tag/v1.1.0):
+  [`PDF-Analyst-Setup.exe`](https://github.com/VadimKa456/PDF-Analyst/releases/download/v1.1.0/PDF-Analyst-Setup.exe) (один `.exe`, 172 670 359 байт,
   SHA256 `69E661C2C7F5EB9AEFCEB6D6162A635396E42E8535052804727FCAB03CCE857E`; MIT-лицензия; логотип VADIJI; экспорт открывает системный диалог сохранения; OCR извлекает мелкие числа в узких колонках).
-- Портативная версия: `dist\PDF Analyst\PDF Analyst.exe` (папка целиком).
+- Каталоги `dist/` и `build/` не коммитятся в Git (порождаемые артефакты); портативная версия `dist\PDF Analyst\PDF Analyst.exe` создаётся локально командой `build_desktop.bat`.
 - Приложение работает в собственном окне (`pywebview` + Edge WebView2), а не в
   браузере. Данные упакованной версии — `%LOCALAPPDATA%\PDF Analyst\data`.
 - Установщик запрашивает установку недостающих компонентов: WebView2 и VC++

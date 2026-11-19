@@ -4,10 +4,17 @@
 
 ## Готовый результат (собран 19.11.2026, проверен)
 
-| Файл | Назначение |
-|------|------------|
-| `dist\installer\PDF-Analyst-Setup.exe` | **Один файл установщика** для Windows 10/11 x64 (~172 МБ). SHA256: `69E661C2C7F5EB9AEFCEB6D6162A635396E42E8535052804727FCAB03CCE857E` (версия 1.1.0; MIT-лицензия; логотип VADIJI; исправлены скачивание отчётов и OCR мелких чисел) |
-| `dist\PDF Analyst\PDF Analyst.exe` | Портативная версия (папка целиком, без установки) |
+**Готовый установщик публикуется в [GitHub Releases](https://github.com/VadimKa456/PDF-Analyst/releases/latest):**
+[`PDF-Analyst-Setup.exe`](https://github.com/VadimKa456/PDF-Analyst/releases/download/v1.1.0/PDF-Analyst-Setup.exe) (172 670 359 байт, Windows 10/11 x64).
+
+> Каталоги `dist/` и `build/` **не коммитятся в Git** — это порождаемые артефакты.
+> Их можно получить только локальной сборкой (`build_desktop.bat`) или скачать
+> готовый `.exe` из Releases.
+
+| Источник | Назначение |
+|----------|------------|
+| [GitHub Release v1.1.0](https://github.com/VadimKa456/PDF-Analyst/releases/tag/v1.1.0) | **Один файл установщика** (~172 МБ). SHA256: `69E661C2C7F5EB9AEFCEB6D6162A635396E42E8535052804727FCAB03CCE857E` (MIT-лицензия; логотип VADIJI; исправлены скачивание отчётов и OCR мелких чисел) |
+| `dist\PDF Analyst\PDF Analyst.exe` (после локальной сборки) | Портативная версия (папка целиком, без установки) |
 
 Установщик проверен: тихая установка во временный каталог → запуск → окно приложения → API `/api/health` → загрузка PDF → обработка (20 показателей, 1 таблица) — без ошибок.
 
