@@ -16,7 +16,7 @@
 | [GitHub Release v1.1.0](https://github.com/VadimKa456/PDF-Analyst/releases/tag/v1.1.0) | **Один файл установщика** (~172 МБ). SHA256: `69E661C2C7F5EB9AEFCEB6D6162A635396E42E8535052804727FCAB03CCE857E` (MIT-лицензия; логотип VADIJI; исправлены скачивание отчётов и OCR мелких чисел) |
 | `dist\PDF Analyst\PDF Analyst.exe` (после локальной сборки) | Портативная версия (папка целиком, без установки) |
 
-Установщик проверен: тихая установка во временный каталог → запуск → окно приложения → API `/api/health` → загрузка PDF → обработка (20 показателей, 1 таблица) — без ошибок.
+Установщик проверен: тихая установка во временный каталог → запуск → окно приложения → API `/api/health` → загрузка PDF → обработка (показатели и таблица извлечены) — без ошибок.
 
 ### Что делает установщик с недостающими компонентами
 На шаге «Готово к установке» он проверяет:
@@ -83,7 +83,7 @@ build_desktop.bat
 ## Ручная сборка
 
 ```bat
-.venv\Scripts\pip install pyinstaller pywebview
+.venv\Scripts\pip install -r requirements-desktop.txt
 cd frontend && npm install && npm run build && cd ..
 .venv\Scripts\python -m PyInstaller --noconfirm --clean pdf_analyst.spec
 "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss

@@ -1,6 +1,6 @@
 # PDF Analyst — локальный анализ и сравнение PDF-документов
 
-Полностью локальное веб-приложение для загрузки, извлечения, анализа, сравнения и экспорта данных из PDF-документов на русском и английском языках, включая сканы (OCR).
+Полностью локальное приложение для загрузки, извлечения, анализа, сравнения и экспорта данных из PDF-документов на русском и английском языках, включая сканы (OCR). Работает как веб-приложение (FastAPI + SPA) и как отдельное desktop-приложение Windows.
 
 Ключевой принцип: **каждое число и каждый вывод имеют ссылку на документ, страницу и фрагмент-источник**. Все расчёты выполняются на Python; LLM (если подключена) используется только для формулировок и не может добавлять числа, которых нет в проверенных данных.
 
@@ -62,7 +62,7 @@
 
 ### Интерфейс
 Разделы: **Dashboard**, **Documents**, **AI Analyst**, **Compare**, **Tables**,
-**Charts**, **Reports**, **Settings**.
+**Charts**, **Reports**, **Settings**, **О программе**.
 
 ### Desktop-приложение (Windows 10/11)
 Готовый установщик **скачивается из [GitHub Releases](https://github.com/VadimKa456/PDF-Analyst/releases/latest)**:
@@ -98,7 +98,7 @@ Edge WebView2 Runtime и Visual C++ Redistributable; для Tesseract OCR отк
 
 - **Windows 10/11** (приложение также работает на Linux/macOS, но скрипты запуска — для Windows).
 - **Python 3.11+** (проверено на 3.12).
-- **Node.js 18+** — только для сборки frontend. Готовая сборка уже лежит в `frontend/dist`, поэтому для запуска Node не обязателен.
+- **Node.js 18+** — только для сборки frontend из исходников (`npm install && npm run build`). Каталог `frontend/dist` не хранится в Git: при клонировании его нет, сборка создаётся локально (или используется готовый desktop-установщик из Releases).
 - **Tesseract OCR** — только для сканированных PDF.
   - Windows: установите [Tesseract для Windows](https://github.com/UB-Mannheim/tesseract/wiki).
   - При установке отметьте язык **Russian** (файл `rus.traineddata`).
@@ -246,19 +246,28 @@ OCR_AUTO=true
 
 Пайплайн распознавания:
 
-1. Страница рендерится при 300 DPI; при необходимости ширина увеличивается до ~2000 px.
+1. Страница рендерится при `OCR_DPI` (по умолчанию 300; диапазон 150–600);
+   при необходимости ширина увеличивается до ~2000 px.
 2. OpenCV: перевод в оттенки серого, выравнивание наклона (deskew),
-   `fastNlMeansDenoising`, адаптивная бинаризация (порог 31/15).
-3. Tesseract вызывается с `--oem 1 --psm 3`; слова и строки собираются из
-   `image_to_data` по `block_num/par_num/line_num`, поэтому порядок текста
-   сохраняется, а не смешивается, как при простом `image_to_string`.
-4. Если уверенность низкая, выполняется повторный проход с Otsu-бинаризацией
-   и `psm 6`; выбирается вариант с большей уверенностью.
-5. Числа дополнительно нормализуются: исправляются OCR-подмены (`О`→`0`,
-   `З`→`3`), восстанавливаются потерянные разряды (`4061 444 118` →
-   `4 061 444 118`), `6/` в конце числа трактуется как `7`.
+   `fastNlMeansDenoising`. Готовятся три варианта изображения: адаптивная
+   бинаризация (порог 31/15), Otsu и «светлый» вариант без бинаризации — он
+   сохраняет мелкие цифры в узких колонках таблиц.
+3. Tesseract (`--oem 3`, `psm 3` и `psm 6`) запускается по несколько проходов
+   для разных вариантов изображения; слова берутся из `image_to_data` с
+   уверенностью и координатами, строки собираются по `block_num/par_num/line_num`.
+4. Выбирается лучший проход: учитываются уверенность, качество (отсутствие
+   аномалий) и количество найденных чисел. Дополнительный проход побеждает
+   только если нашёл существенно больше чисел (например, `1`/`0` в колонках
+   бланка оценки) или заметно лучше по качеству — так не ломаются обычные
+   финансовые таблицы.
+5. Числа нормализуются: исправляются OCR-подмены (`О`→`0`, `З`→`3`),
+   восстанавливаются потерянные разряды (`4061 444 118` → `4 061 444 118`),
+   `6/` в конце числа трактуется как `7`, восстанавливается висячая десятичная
+   запятая (`1153233 ,` → `11 532,33`).
 6. Таблицы восстанавливаются по координатам слов: строки — по вертикали,
-   колонки — по правым границам числовых слов.
+   колонки — по кластерам числовых слов и зазорам между словами; шапка
+   определяется эвристикой (год в шапке не обязателен), многострочные подписи
+   и criteria-строки без чисел включаются в таблицу.
 
 При уверенности ниже `OCR_MIN_CONFIDENCE` документ получает предупреждение;
 на дашборде такие документы попадают в блок «Требуют внимания».
@@ -304,56 +313,39 @@ OCR_AUTO=true
 ## Структура проекта
 
 ```
-Анализ PDF/
+PDF-Analyst/
 ├── backend/
 │   ├── app/
-│   │   ├── api/                 # REST-роутеры
-│   │   │   ├── projects.py
-│   │   │   ├── documents.py
-│   │   │   ├── analysis.py
-│   │   │   ├── compare.py
-│   │   │   ├── tables_charts.py
-│   │   │   ├── dashboard.py
-│   │   │   ├── search.py
-│   │   │   ├── options.py
-│   │   │   ├── settings.py
-│   │   │   └── exports.py
-│   │   ├── services/
-│   │   │   ├── pdf_processor.py # текст, OCR, таблицы, показатели
-│   │   │   ├── analytics.py     # кластеризация, сравнение, расчёты
-│   │   │   ├── retrieval.py     # FTS5 и семантический поиск
-│   │   │   ├── query_engine.py  # интенты, план, RAG, AI-валидация
-│   │   │   ├── builders.py      # сборка таблиц/графиков
-│   │   │   ├── exports.py       # Excel, CSV, PDF, PNG
-│   │   │   ├── ai_client.py     # OpenAI-совместимый API и Ollama
-│   │   │   ├── jobs.py          # асинхронная обработка
-│   │   │   └── runtime_settings.py
-│   │   ├── config.py
-│   │   ├── database.py
-│   │   ├── models.py
-│   │   ├── schemas.py
-│   │   ├── utils.py
-│   │   └── main.py
+│   │   ├── api/                 # REST-роутеры: projects, documents, analysis,
+│   │   │                        # compare, tables_charts, dashboard, search,
+│   │   │                        # options, settings, exports
+│   │   ├── services/            # pdf_processor, analytics, retrieval,
+│   │   │                        # query_engine, builders, exports, ai_client,
+│   │   │                        # jobs, runtime_settings
+│   │   └── config.py, database.py, models.py, schemas.py, utils.py, main.py
 │   ├── tests/                   # 132 pytest-теста
 │   ├── _final_e2e.py            # сквозной HTTP-тест (78 проверок)
 │   └── pytest.ini
 ├── frontend/
+│   ├── public/                  # vadiji-logo.jpg, LICENSE.txt
 │   ├── src/
 │   │   ├── pages/               # Dashboard, Documents, Analyst, Compare,
-│   │   │                        # Tables, Charts, Reports, Settings
-│   │   ├── components/
-│   │   ├── api.ts
-│   │   └── App.tsx
-│   └── dist/                    # готовая сборка (раздаётся сервером)
+│   │   │                        # Tables, Charts, Reports, Settings, About
+│   │   ├── components/ui.tsx    # DataTable, ChartView, AnswerCard и др.
+│   │   └── api.ts, state.tsx, types.ts, main.tsx, index.css
+│   ├── package.json, package-lock.json, vite.config.ts, tailwind.config.js
+│   └── dist/                    # генерируется npm run build (НЕ в Git)
 ├── samples/
-│   ├── pdfs/                    # 14 синтетических PDF для тестов
-│   └── generate_samples.py
-├── data/                        # БД, загруженные PDF, экспорты (не в git)
-├── .env.example
-├── requirements.txt
-├── setup.bat
-├── start.bat
-└── run_tests.bat
+│   ├── generate_samples.py      # генератор тестовых PDF
+│   └── pdfs/                    # создаётся скриптом (НЕ в Git)
+├── data/                        # БД, загрузки, экспорты (НЕ в Git, есть .gitkeep)
+├── .github/workflows/ci.yml     # CI: pytest + сборка frontend
+├── .env.example, .gitignore, .gitattributes
+├── LICENSE, README.md, FINAL_REPORT.md, DESKTOP_BUILD.md
+├── desktop_app.py               # desktop-лаунчер (pywebview + FastAPI)
+├── pdf_analyst.spec, installer.iss, build_desktop.bat
+├── requirements.txt, requirements-desktop.txt
+└── setup.bat, start.bat, run_tests.bat
 ```
 
 ### Модель данных
@@ -418,8 +410,8 @@ OCR_AUTO=true
 
 ### Тестовые данные
 
-В поставке уже есть 14 синтетических PDF в `samples/pdfs/`. Если каталог пуст
-(например, после клонирования репозитория), сгенерируйте файлы:
+Каталог `samples/pdfs/` не хранится в Git. После клонирования репозитория
+сгенерируйте 14 синтетических PDF:
 
 ```powershell
 python samples/generate_samples.py
@@ -489,9 +481,9 @@ python _final_e2e.py
 
 ## Ограничения
 
-- **Браузерная проверка UI** в текущем окружении не выполнялась интерактивно
-  (инструмент браузера был недоступен). Интерфейс проверен сборкой TypeScript,
-  успешной Vite-сборкой и HTTP-раздачей SPA; все функции проверены через API E2E.
+- **Проверка UI** выполнена для ключевых экранов (About, Reports, экспорт) через
+  встроенный браузер, а также полным API E2E. Остальные разделы проверены
+  TypeScript-сборкой, Vite-сборкой и HTTP-раздачей SPA.
 - **Облачный AI** проверен на реальном OpenAI-совместимом провайдере
   (`https://anymodel.org/v1`): список моделей, чат, JSON-режим, повтор временных
   `503` и полный цикл AI-аналитика. У этого провайдера нет модели
@@ -516,8 +508,8 @@ python _final_e2e.py
 |----------|---------|
 | `Port 8000 is already in use` | Остановите другой процесс или задайте `PORT=8001` в `.env` |
 | `Tesseract not found` | Установите Tesseract с русским языком; укажите путь в Settings или `TESSERACT_CMD` |
-| `Frontend ещё не собран` | Выполните `cd frontend && npm install && npm run build` |
-| `node`/`npm` не найдены | Установите Node.js 18+ или используйте готовую сборку `frontend/dist` |
+| `Frontend ещё не собран` | После клонирования выполняется `cd frontend && npm install && npm run build` (каталог `dist` не хранится в Git) |
+| `node`/`npm` не найдены | Установите Node.js 18+ или скачайте готовый desktop-установщик из [Releases](https://github.com/VadimKa456/PDF-Analyst/releases/latest) |
 | Русский текст в OCR не распознаётся | Проверьте `rus.traineddata` и языки в Settings (`rus+eng`) |
 | Медленная обработка сканов | Уменьшите `OCR_DPI` (например, 200) или отключите OCR для текстовых PDF |
 | Пустые таблицы | PDF может не содержать таблиц как структуры; проверьте текст страницы и OCR |
