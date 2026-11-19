@@ -76,7 +76,7 @@ setup.bat, start.bat, run_tests.bat
 LICENSE, README.md, FINAL_REPORT.md, DESKTOP_BUILD.md
 ```
 
-Итого в репозитории **86 файлов**: 41 `.py`, 17 `.ts`/`.tsx`, 3 `.md`; каталоги
+Итого в репозитории **94 файла**: 41 `.py`, 17 `.ts`/`.tsx`, 8 `.md`; каталоги
 `dist/`, `build/`, `samples/pdfs/`, содержимое `data/` и `.env` в Git не входят.
 
 ---
@@ -220,6 +220,7 @@ npm run build
 - AI-провайдер задаётся в настройках; по умолчанию `none` (локальный движок).
   Ключи маскируются и не попадают в логи.
 - Исходники выложены на GitHub (`main`), готовый установщик — в Release v1.1.0.
+- [Community Standards](https://github.com/VadimKa456/PDF-Analyst/community): 100% — добавлены описание репозитория, CODE_OF_CONDUCT, CONTRIBUTING, SECURITY, issue/PR-шаблоны и ACCESSIBILITY.
 - Временные диагностические файлы удалены; оставлен `backend/_final_e2e.py`.
 - `frontend/dist` создаётся локально (`npm run build`) и не хранится в Git.
 
