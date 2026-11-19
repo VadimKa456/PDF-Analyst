@@ -348,6 +348,22 @@ PDF-Analyst/
 └── setup.bat, start.bat, run_tests.bat
 ```
 
+### Состав репозитория
+
+Ветка `main` содержит **86 файлов**:
+
+| Каталог | Файлов | Содержимое |
+|---------|--------|------------|
+| `backend/` | 40 | приложение FastAPI, 9 файлов тестов (`conftest.py` + 8 `test_*.py`), `_final_e2e.py`, `pytest.ini` |
+| `frontend/` | 27 | исходники React/TS, `public/`, конфиги сборки (без `dist/`) |
+| `.github/` | 1 | `workflows/ci.yml` (pytest + сборка frontend) |
+| `data/` | 1 | только `.gitkeep` (БД и загрузки не хранятся) |
+| `samples/` | 1 | `generate_samples.py` (PDF генерируются локально) |
+| корень | 16 | `README.md`, `FINAL_REPORT.md`, `DESKTOP_BUILD.md`, `LICENSE`, `.env.example`, `.gitignore`, `.gitattributes`, `desktop_app.py`, `pdf_analyst.spec`, `installer.iss`, `build_desktop.bat`, `requirements*.txt`, `setup.bat`, `start.bat`, `run_tests.bat` |
+
+Всего: 41 Python-файл, 17 TypeScript/TSX, 3 Markdown. Готовый установщик — в
+[GitHub Releases](https://github.com/VadimKa456/PDF-Analyst/releases/latest), а не в репозитории.
+
 ### Модель данных
 
 - `Project` — проект.
