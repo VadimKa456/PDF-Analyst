@@ -10,6 +10,8 @@
 
 ![PDF Analyst — desktop-приложение, дашборд проекта](screenshots/desktop-dashboard.png)
 
+[English documentation](README_EN.md) · [Готовые тексты объявления](ANNOUNCEMENT.md) · [Скачать установщик](https://github.com/VadimKa456/PDF-Analyst/releases/latest)
+
 Ключевой принцип: **каждое число и каждый вывод имеют ссылку на документ, страницу и фрагмент-источник**. Все расчёты выполняются на Python; LLM (если подключена) используется только для формулировок и не может добавлять числа, которых нет в проверенных данных.
 
 ---
@@ -351,7 +353,8 @@ PDF-Analyst/
 ├── data/                        # БД, загрузки, экспорты (НЕ в Git, есть .gitkeep)
 ├── .github/workflows/ci.yml     # CI: pytest + сборка frontend
 ├── .env.example, .gitignore, .gitattributes
-├── LICENSE, README.md, FINAL_REPORT.md, DESKTOP_BUILD.md
+├── LICENSE, README.md, README_EN.md, ANNOUNCEMENT.md
+├── FINAL_REPORT.md, DESKTOP_BUILD.md, CONTRIBUTING.md, SECURITY.md, ACCESSIBILITY.md
 ├── desktop_app.py               # desktop-лаунчер (pywebview + FastAPI)
 ├── pdf_analyst.spec, installer.iss, build_desktop.bat
 ├── requirements.txt, requirements-desktop.txt
@@ -360,7 +363,7 @@ PDF-Analyst/
 
 ### Состав репозитория
 
-Ветка `main` содержит **95 файлов**:
+Ветка `main` содержит **97 файлов**:
 
 | Каталог | Файлов | Содержимое |
 |---------|--------|------------|
@@ -370,9 +373,9 @@ PDF-Analyst/
 | `data/` | 1 | только `.gitkeep` (БД и загрузки не хранятся) |
 | `samples/` | 1 | `generate_samples.py` (PDF генерируются локально) |
 | `screenshots/` | 1 | скриншот desktop-приложения для README |
-| корень | 19 | `README.md`, `FINAL_REPORT.md`, `DESKTOP_BUILD.md`, `CONTRIBUTING.md`, `SECURITY.md`, `ACCESSIBILITY.md`, `LICENSE`, `.env.example`, `.gitignore`, `.gitattributes`, `desktop_app.py`, `pdf_analyst.spec`, `installer.iss`, `build_desktop.bat`, `requirements*.txt`, `setup.bat`, `start.bat`, `run_tests.bat` |
+| корень | 21 | `README.md`, `README_EN.md`, `ANNOUNCEMENT.md`, `FINAL_REPORT.md`, `DESKTOP_BUILD.md`, `CONTRIBUTING.md`, `SECURITY.md`, `ACCESSIBILITY.md`, `LICENSE`, `.env.example`, `.gitignore`, `.gitattributes`, `desktop_app.py`, `pdf_analyst.spec`, `installer.iss`, `build_desktop.bat`, `requirements*.txt`, `setup.bat`, `start.bat`, `run_tests.bat` |
 
-Всего: 41 Python-файл, 17 TypeScript/TSX, 8 Markdown. Готовый установщик — в
+Всего: 41 Python-файл, 17 TypeScript/TSX, 10 Markdown. Готовый установщик — в
 [GitHub Releases](https://github.com/VadimKa456/PDF-Analyst/releases/latest), а не в репозитории.
 
 ### Модель данных
@@ -553,6 +556,7 @@ python _final_e2e.py
 - [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md) — чек-лист pull request.
 - [SECURITY.md](SECURITY.md) — как приватно сообщить об уязвимости.
 - [ACCESSIBILITY.md](ACCESSIBILITY.md) — доступность и известные ограничения.
+- [ANNOUNCEMENT.md](ANNOUNCEMENT.md) — готовые тексты для объявления проекта.
 - [GitHub Community](https://github.com/VadimKa456/PDF-Analyst/community) — стандарты сообщества проекта.
 
 ---
