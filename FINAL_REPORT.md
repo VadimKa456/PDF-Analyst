@@ -76,7 +76,7 @@ setup.bat, start.bat, run_tests.bat
 LICENSE, README.md, FINAL_REPORT.md, DESKTOP_BUILD.md
 ```
 
-Итого в репозитории **94 файла**: 41 `.py`, 17 `.ts`/`.tsx`, 8 `.md`; каталоги
+Итого в репозитории **95 файлов**: 41 `.py`, 17 `.ts`/`.tsx`, 8 `.md` (включая скриншот дашборда в `screenshots/`); каталоги
 `dist/`, `build/`, `samples/pdfs/`, содержимое `data/` и `.env` в Git не входят.
 
 ---

@@ -1,6 +1,14 @@
 # PDF Analyst — локальный анализ и сравнение PDF-документов
 
+[![CI](https://github.com/VadimKa456/PDF-Analyst/actions/workflows/ci.yml/badge.svg)](https://github.com/VadimKa456/PDF-Analyst/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/VadimKa456/PDF-Analyst)](https://github.com/VadimKa456/PDF-Analyst/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
 Полностью локальное приложение для загрузки, извлечения, анализа, сравнения и экспорта данных из PDF-документов на русском и английском языках, включая сканы (OCR). Работает как веб-приложение (FastAPI + SPA) и как отдельное desktop-приложение Windows.
+
+![PDF Analyst — desktop-приложение, дашборд проекта](screenshots/desktop-dashboard.png)
 
 Ключевой принцип: **каждое число и каждый вывод имеют ссылку на документ, страницу и фрагмент-источник**. Все расчёты выполняются на Python; LLM (если подключена) используется только для формулировок и не может добавлять числа, которых нет в проверенных данных.
 
@@ -338,6 +346,8 @@ PDF-Analyst/
 ├── samples/
 │   ├── generate_samples.py      # генератор тестовых PDF
 │   └── pdfs/                    # создаётся скриптом (НЕ в Git)
+├── screenshots/
+│   └── desktop-dashboard.png    # скриншот приложения для README
 ├── data/                        # БД, загрузки, экспорты (НЕ в Git, есть .gitkeep)
 ├── .github/workflows/ci.yml     # CI: pytest + сборка frontend
 ├── .env.example, .gitignore, .gitattributes
@@ -350,7 +360,7 @@ PDF-Analyst/
 
 ### Состав репозитория
 
-Ветка `main` содержит **94 файла**:
+Ветка `main` содержит **95 файлов**:
 
 | Каталог | Файлов | Содержимое |
 |---------|--------|------------|
@@ -359,6 +369,7 @@ PDF-Analyst/
 | `.github/` | 6 | `workflows/ci.yml`, CODE_OF_CONDUCT, PR-шаблон, 3 issue-шаблона |
 | `data/` | 1 | только `.gitkeep` (БД и загрузки не хранятся) |
 | `samples/` | 1 | `generate_samples.py` (PDF генерируются локально) |
+| `screenshots/` | 1 | скриншот desktop-приложения для README |
 | корень | 19 | `README.md`, `FINAL_REPORT.md`, `DESKTOP_BUILD.md`, `CONTRIBUTING.md`, `SECURITY.md`, `ACCESSIBILITY.md`, `LICENSE`, `.env.example`, `.gitignore`, `.gitattributes`, `desktop_app.py`, `pdf_analyst.spec`, `installer.iss`, `build_desktop.bat`, `requirements*.txt`, `setup.bat`, `start.bat`, `run_tests.bat` |
 
 Всего: 41 Python-файл, 17 TypeScript/TSX, 8 Markdown. Готовый установщик — в
