@@ -1,0 +1,49 @@
+name: Предложение функции
+description: Предложить новую возможность или улучшение
+title: "[Feature]: "
+labels: [enhancement]
+assignees: []
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какая задача решается?
+      description: Опишите проблему или потребность, которую решит функция.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Предлагаемое решение
+      description: Как должна работать функция? Примеры из PDF-отчётов приветствуются.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Альтернативы
+      description: Какие обходные пути вы пробовали?
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Область
+      options:
+        - Извлечение / OCR
+        - Аналитика и сравнение
+        - Таблицы и графики
+        - Экспорт
+        - UI / Desktop
+        - Документация
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Проверки
+      options:
+        - label: Я проверил(а), что такой функции ещё нет в README
+          required: true
+        - label: Функция не требует отправки полных PDF в облако
+          required: false

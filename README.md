@@ -534,6 +534,18 @@ python _final_e2e.py
 
 ---
 
+## Участие в разработке
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) — как подготовить окружение, запустить тесты и отправить PR.
+- [.github/CODE_OF_CONDUCT.md](.github/CODE_OF_CONDUCT.md) — кодекс поведения участников.
+- [.github/ISSUE_TEMPLATE](.github/ISSUE_TEMPLATE) — шаблоны для сообщений об ошибках и предложений.
+- [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md) — чек-лист pull request.
+- [SECURITY.md](SECURITY.md) — как приватно сообщить об уязвимости.
+- [ACCESSIBILITY.md](ACCESSIBILITY.md) — доступность и известные ограничения.
+- [GitHub Community](https://github.com/VadimKa456/PDF-Analyst/community) — стандарты сообщества проекта.
+
+---
+
 ## Лицензия и назначение
 
 **PDF Analyst распространяется по лицензии MIT.** Полный текст — в файле

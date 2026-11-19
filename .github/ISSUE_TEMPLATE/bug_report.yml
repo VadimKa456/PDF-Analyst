@@ -1,0 +1,72 @@
+name: Сообщение об ошибке
+description: Сообщить о проблеме в работе приложения
+title: "[Bug]: "
+labels: [bug]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо за сообщение! Пожалуйста, не прикладывайте конфиденциальные PDF —
+        используйте тестовые файлы из `samples/`.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Что произошло?
+      description: Кратко опишите проблему и ожидаемое поведение.
+      placeholder: Например, числа из колонки «Фактическая оценка» не попадают в показатели.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Шаги воспроизведения
+      description: 1. ... 2. ... 3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Режим запуска
+      options:
+        - Desktop (установщик Windows)
+        - Web (start.bat / uvicorn)
+        - CI / тесты
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Версия
+      placeholder: "1.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Операционная система
+      options:
+        - Windows 11
+        - Windows 10
+        - Linux
+        - macOS
+        - Другое
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Логи
+      description: Для desktop — `%LOCALAPPDATA%\PDF Analyst\logs\desktop.log`.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Проверки
+      options:
+        - label: Я проверил(а) README и раздел «Устранение неполадок»
+          required: true
+        - label: Проблема воспроизводится на последней версии
+          required: true
