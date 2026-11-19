@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+frontend/npm-*.log
+
+# Local runtime data (DB, uploads, exports) — not for version control
+data/*
+!data/.gitkeep
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Build artifacts (PyInstaller / Inno Setup)
+/build/
+/dist/
+*.spec.bak
+
+# Logs and OS files
+*.log
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Generated sample PDFs (recreate with: python samples/generate_samples.py)
+samples/pdfs/
