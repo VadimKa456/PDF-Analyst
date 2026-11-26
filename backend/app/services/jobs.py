@@ -71,6 +71,9 @@ def process_document(document_id: int) -> None:
                 "min_confidence": ocr_settings.get("ocr_min_confidence"),
                 "auto": ocr_settings.get("ocr_auto"),
                 "tesseract_cmd": ocr_settings.get("tesseract_cmd"),
+                "max_file_bytes": int(
+                    ocr_settings.get("max_upload_mb") or 100
+                ) * 1024 * 1024,
             }
 
         if not Path(started_doc.file_path).exists():
