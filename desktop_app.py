@@ -169,8 +169,7 @@ def main() -> int:
         )
         return 1
 
-    # The desktop API has no authentication yet; never expose it on LAN interfaces.
-    # Ignore HOST from the environment to keep the listener loopback-only.
+    # Keep the authenticated desktop listener loopback-only; ignore HOST overrides.
     host = "127.0.0.1"
     port = _pick_port(int(getattr(settings, "port", 8000) or 8000))
     url = f"http://{host}:{port}"
