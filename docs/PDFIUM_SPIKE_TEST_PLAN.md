@@ -29,8 +29,11 @@ an English financial statement, an audit variant, and a scanned-image PDF.
   corpus or malformed/password-protected PDFs.
 - Text similarity does not prove identical reading order, font metadata,
   bounding boxes, or table-cell geometry.
-- OCR accuracy, multi-column layouts, rotated pages, merged/borderless tables,
-  large-file memory use, and Windows installer packaging remain unvalidated.
+- OCR accuracy on a deterministic scanned Russian fixture is exercised by the
+  dedicated Linux CI job with Tesseract Russian language data. This does not
+  establish OCR quality on arbitrary customer documents.
+- Multi-column layouts, rotated pages, merged/borderless tables, large-file
+  memory use, and Windows installer packaging remain unvalidated.
 - PDFium calls are serialized by the experimental adapter because PDFium is
   not thread-safe across concurrent calls.
 
