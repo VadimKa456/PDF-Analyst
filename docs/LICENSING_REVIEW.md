@@ -104,14 +104,21 @@ third-party review items:
   record the metadata omission; do not treat the UNKNOWN label as evidence that
   the source license is absent. Reference: [PyPI release
   0.3.1](https://pypi.org/project/clr_loader/0.3.1/).
-- **`proxy_tools==0.1.0`:** PyPI reports MIT, but the upstream repository's
-  `LICENSE.txt` is a BSD license with copyright notices for Armin Ronacher and
-  Jonathan Tushman. The CI wheel inventory did not find a license file. This is
-  a metadata/source discrepancy, not a resolved MIT conclusion. Confirm the
-  licensing of the exact PyPI source distribution with the maintainer or
-  replace the dependency before making a definitive statement. References:
-  [PyPI metadata](https://pypi.org/project/proxy_tools/0.1.0/) and
-  [upstream LICENSE.txt](https://github.com/jtushman/proxy_tools/blob/master/LICENSE.txt).
+- **`proxy_tools==0.1.0`:** PyPI metadata and the upstream `setup.py` at
+  commit `ccd35a56` both declare MIT. However, the same upstream source snapshot
+  contains a `LICENSE.txt` headed "The BSD License" with copyright notices for
+  Armin Ronacher (2013) and Jonathan Tushman (2014). GitHub records that file in
+  commit `ccd35a56` at 17:11:55Z on 5 May 2014; PyPI records the 0.1.0 sdist
+  upload at 21:02:24Z on the same date with SHA-256
+  `ccb3751f529c047e2d8a58440d86b205303cf0fe8146f784d1cbcd94f0a28010`.
+  The installed wheel inventory does not contain a license text, and the exact
+  sdist contents have not yet been verified against that repository snapshot.
+  Treat this as an unresolved metadata/source-notice discrepancy: preserve the
+  BSD notice as additional evidence, obtain maintainer confirmation for the
+  exact sdist, or replace the dependency before making a definitive statement.
+  References: [PyPI metadata and sdist hash](https://pypi.org/project/proxy_tools/0.1.0/),
+  [upstream setup.py at ccd35a56](https://github.com/jtushman/proxy_tools/blob/ccd35a56/setup.py),
+  [upstream LICENSE.txt at ccd35a56](https://github.com/jtushman/proxy_tools/blob/ccd35a56/LICENSE.txt).
 - **`pypdfium2==5.15.2`:** package metadata declares BSD-3-Clause / Apache-2.0
   and additional PDFium dependency licenses. Its release documentation
   explicitly says PDFium's license and bundled dependency licenses must ship
