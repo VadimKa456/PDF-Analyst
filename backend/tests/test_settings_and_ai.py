@@ -11,7 +11,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.database import Base
+from app.api.settings import _validate_patch
+from fastapi import HTTPException
 from app.services.ai_client import AIClient, AIError
+from app.services.ai_url import validate_ai_base_url
 from app.services.query_engine import (
     _allowed_numbers,
     _docs_payload,
@@ -94,11 +97,45 @@ def test_ai_client_availability_does_not_require_network() -> None:
     assert AIClient({"ai_provider": "openai", "openai_api_key": ""}).available is False
     assert (
         AIClient(
-            {"ai_provider": "openai", "openai_api_key": "sk-x", "openai_base_url": "http://x/v1"}
+            {"ai_provider": "openai", "openai_api_key": "sk-x", "openai_base_url": "https://x/v1"}
         ).available
         is True
     )
+    assert (
+        AIClient(
+            {"ai_provider": "openai", "openai_api_key": "sk-x", "openai_base_url": "http://x/v1"}
+        ).available
+        is False
+    )
     assert AIClient({"ai_provider": "ollama", "ollama_base_url": "http://localhost:11434"}).available
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://provider.example/v1",
+        "http://192.168.1.20:11434",
+        "http://10.0.0.5:8000",
+        "https://provider.example/v1?mode=test",
+        "https://service.internal/v1",
+        "file:///tmp/sample",
+    ],
+)
+def test_ai_endpoint_validation_rejects_unsafe_urls(url: str) -> None:
+    with pytest.raises(ValueError):
+        validate_ai_base_url(url)
+
+
+def test_ai_endpoint_validation_allows_https_and_loopback_http() -> None:
+    assert validate_ai_base_url("https://provider.example/v1") == "https://provider.example/v1"
+    assert validate_ai_base_url("http://127.0.0.1:11434/") == "http://127.0.0.1:11434"
+
+
+def test_settings_reject_remote_ai_endpoints_over_plain_http() -> None:
+    with pytest.raises(HTTPException) as error:
+        _validate_patch({"openai_base_url": "http://provider.example/v1"})
+    assert error.value.status_code == 422
+    assert "HTTPS" in str(error.value.detail)
 
 
 def test_local_mode_never_calls_ai() -> None:
