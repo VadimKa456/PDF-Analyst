@@ -225,8 +225,12 @@ def page_image(document_id: int, page_number: int, db: Session = Depends(get_db)
     doc = _get_doc(db, document_id)
     try:
         png = pdf_processor.render_page_png(doc.file_path, page_number, dpi=120)
-    except Exception as exc:  # noqa: BLE001
+    except pdf_processor.PDFResourceLimitError as exc:
+        raise HTTPException(413, str(exc)) from exc
+    except ValueError as exc:
         raise HTTPException(404, f"Не удалось отрисовать страницу: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(422, "Не удалось отрисовать страницу PDF.") from exc
     return Response(content=png, media_type="image/png")
 
 
