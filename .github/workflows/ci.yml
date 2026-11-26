@@ -43,6 +43,29 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  ocr-regression:
+    name: OCR regression (Tesseract Russian + English)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Tesseract with Russian language data
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-rus
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Generate deterministic OCR test corpus
+        run: python samples/generate_samples.py
+      - name: Run OCR regression tests
+        working-directory: backend
+        run: python -m pytest -q tests/test_ocr.py
+
   pdfium-comparison:
     name: PDFium vs PyMuPDF corpus comparison
     runs-on: windows-latest
