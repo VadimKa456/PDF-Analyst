@@ -734,6 +734,10 @@ def _ocr_tables_from_words(
             joined = " ".join(c["text"] for c in data_cells)
             if not joined.strip():
                 continue
+            # Ignore OCR-only separators/borders (for example a row containing
+            # just "|" between the table header and its first data row).
+            if not re.search(r"[0-9A-Za-zА-Яа-яЁё]", joined):
+                continue
             # Конец таблицы: подписи/реквизиты после неё
             if re.search(r"(?:начальник|ознакомлен|подпись|должность|ФИО)", joined, re.I):
                 break
