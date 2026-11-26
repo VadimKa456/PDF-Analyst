@@ -15,6 +15,7 @@ from app.services.pdf_processor import (
     DocumentExtraction,
     ExtractedTable,
     PDFResourceLimitError,
+    MAX_PAGE_TEXT_CHARS,
     _bounded_page_dpi,
     _clean_metric_label,
     _ocr_page,
@@ -395,3 +396,104 @@ def test_pdf_processing_enforces_total_time_budget(
     )
     with pytest.raises(PDFResourceLimitError, match="общий лимит времени"):
         extract_document(path, path.name, ocr_config={"enabled": False})
+
+def _make_one_page_pdf(path: Path, text: str = "Annual report summary 2024.") -> None:
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), text)
+    doc.save(path)
+    doc.close()
+
+
+def test_ocr_output_is_checked_against_page_text_limit_before_table_extraction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "oversized-ocr-text.pdf"
+    _make_one_page_pdf(path, "Scanned page placeholder")
+
+    monkeypatch.setattr("app.services.pdf_processor._needs_ocr", lambda *_args: True)
+    monkeypatch.setattr(
+        "app.services.pdf_processor._ocr_languages",
+        lambda _cfg: ("eng", []),
+    )
+    monkeypatch.setattr(
+        "app.services.pdf_processor._ocr_page",
+        lambda *_args, **_kwargs: ("x" * (MAX_PAGE_TEXT_CHARS + 1), 99.0, []),
+    )
+    monkeypatch.setattr(
+        "app.services.pdf_processor._extract_tables_pymupdf",
+        lambda *_args: pytest.fail("table extraction must not run for oversized OCR text"),
+    )
+
+    with pytest.raises(PDFResourceLimitError, match="слишком много текста"):
+        extract_document(path, path.name, ocr_config={"enabled": True})
+
+
+def test_document_table_cell_budget_skips_excess_tables(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "table-budget.pdf"
+    _make_one_page_pdf(path)
+    tables = [
+        ExtractedTable(
+            page_number=1,
+            title="",
+            headers=["Показатель", "2024"],
+            rows=[["Revenue", "100"]],
+            method="pymupdf",
+            confidence=0.9,
+        ),
+        ExtractedTable(
+            page_number=1,
+            title="",
+            headers=["Показатель", "2024"],
+            rows=[["Expenses", "80"]],
+            method="pymupdf",
+            confidence=0.9,
+        ),
+    ]
+    monkeypatch.setattr(
+        "app.services.pdf_processor.MAX_DOCUMENT_TABLE_CELLS", 5
+    )
+    monkeypatch.setattr(
+        "app.services.pdf_processor._extract_tables_pymupdf",
+        lambda *_args: tables,
+    )
+    monkeypatch.setattr(
+        "app.services.pdf_processor._table_metrics",
+        lambda *_args, **_kwargs: [],
+    )
+
+    result = extract_document(path, path.name, ocr_config={"enabled": False})
+
+    assert len(result.tables) == 1
+    assert any("общий лимит табличных данных" in warning for warning in result.warnings)
+
+
+def test_document_metric_budget_stops_excessive_extraction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "metric-budget.pdf"
+    _make_one_page_pdf(path)
+
+    monkeypatch.setattr("app.services.pdf_processor.MAX_DOCUMENT_METRICS", 0)
+    monkeypatch.setattr(
+        "app.services.pdf_processor._extract_tables_pymupdf",
+        lambda *_args: [],
+    )
+    monkeypatch.setattr(
+        "app.services.pdf_processor._extract_tables_pdfplumber",
+        lambda *_args: [],
+    )
+    monkeypatch.setattr(
+        "app.services.pdf_processor._header_kv_metrics",
+        lambda *_args: [object()],
+    )
+    monkeypatch.setattr(
+        "app.services.pdf_processor._text_metrics",
+        lambda *_args: [],
+    )
+
+    with pytest.raises(PDFResourceLimitError, match="слишком много извлечённых показателей"):
+        extract_document(path, path.name, ocr_config={"enabled": False})
+
