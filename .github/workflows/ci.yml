@@ -24,6 +24,14 @@ jobs:
           python -m pip install -r ..\requirements.txt
       - name: Run tests
         run: python -m pytest -q
+      - name: Generate Python dependency inventory
+        run: python ..\tools\generate_compliance_inventory.py --python-only --output-dir "${{ runner.temp }}\pdf-analyst-compliance\python"
+      - name: Upload Python SBOM and license inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-analyst-python-compliance
+          path: ${{ runner.temp }}/pdf-analyst-compliance/python/
+          if-no-files-found: error
 
   frontend:
     name: Frontend (typecheck + build)
@@ -40,3 +48,15 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run build
+      - name: Set up Python for lockfile inventory
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Generate frontend dependency inventory
+        run: python ..\tools\generate_compliance_inventory.py --frontend-only --frontend-node-modules node_modules --output-dir "${{ runner.temp }}\pdf-analyst-compliance\frontend"
+      - name: Upload frontend SBOM and license inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-analyst-frontend-compliance
+          path: ${{ runner.temp }}/pdf-analyst-compliance/frontend/
+          if-no-files-found: error
