@@ -172,7 +172,10 @@ def _smoke_http_request(
     except urllib.error.HTTPError as exc:
         response = exc
     with response:
-        return int(response.status), response.headers, response.read()
+        status = getattr(response, "status", None) or getattr(response, "code", None)
+        if status is None:
+            status = response.getcode()
+        return int(status), response.headers, response.read()
 
 
 def _run_headless_smoke(url: str, server: object) -> None:
