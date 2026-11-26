@@ -442,3 +442,23 @@ def test_ai_answer_with_supported_numbers_is_accepted() -> None:
     allowed = _allowed_numbers(facts)
     ok, reason = _validate_ai_text("Выручка 120 млн руб., стр. 4.", allowed)
     assert ok and reason is None
+
+def test_openai_client_ignores_untrusted_proxy_environment(
+    fake_openai: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A user- or machine-level proxy must not silently receive the API key.
+    for name in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"):
+        monkeypatch.setenv(name, "http://127.0.0.1:1")
+    monkeypatch.setenv("NO_PROXY", "")
+    monkeypatch.setenv("no_proxy", "")
+
+    client = AIClient(
+        {
+            "ai_provider": "openai",
+            "openai_api_key": "sk-test",
+            "openai_base_url": fake_openai,
+            "openai_model": "test-model",
+            "ai_timeout_seconds": 5,
+        }
+    )
+    assert client.list_models() == ["test-model"]
