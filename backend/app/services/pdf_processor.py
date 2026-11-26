@@ -11,6 +11,7 @@ import math
 import os
 import re
 import shutil
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -52,6 +53,7 @@ MAX_TABLES_PER_PAGE = 100
 MAX_TABLE_CELLS = 20_000
 MIN_OCR_DPI = 150
 MIN_PREVIEW_DPI = 36
+MAX_OCR_PAGE_SECONDS = 30.0
 
 
 class PDFResourceLimitError(ValueError):
@@ -387,13 +389,21 @@ def _ocr_quality(text: str, mean_conf: float) -> float:
 _BORDER_NOISE_RE = re.compile(r"^[|_=~^<>\[\]{}()/\\•·\-–—]+$")
 
 
-def _ocr_words(image: Image.Image, lang: str, psm: int) -> tuple[list[dict[str, Any]], float]:
-    data = pytesseract.image_to_data(
-        image,
-        lang=lang,
-        config=f"--oem 3 --psm {psm}",
-        output_type=pytesseract.Output.DICT,
-    )
+def _ocr_words(
+    image: Image.Image,
+    lang: str,
+    psm: int,
+    *,
+    timeout: float | None = None,
+) -> tuple[list[dict[str, Any]], float]:
+    kwargs: dict[str, Any] = {
+        "lang": lang,
+        "config": f"--oem 3 --psm {psm}",
+        "output_type": pytesseract.Output.DICT,
+    }
+    if timeout is not None:
+        kwargs["timeout"] = max(0.1, float(timeout))
+    data = pytesseract.image_to_data(image, **kwargs)
     words: list[dict[str, Any]] = []
     confidences: list[float] = []
     texts = data.get("text", [])
@@ -507,7 +517,14 @@ def _bounded_page_dpi(
     return effective
 
 
-def _ocr_page(page: pymupdf.Page, lang: str, cfg: dict[str, Any]) -> tuple[str, float, list[dict[str, Any]]]:
+def _ocr_page(
+    page: pymupdf.Page,
+    lang: str,
+    cfg: dict[str, Any],
+    *,
+    page_number: int | None = None,
+    warnings: list[str] | None = None,
+) -> tuple[str, float, list[dict[str, Any]]]:
     requested_dpi = max(MIN_OCR_DPI, min(int(cfg.get("dpi") or 300), 600))
     dpi = _bounded_page_dpi(page, requested_dpi, minimum_dpi=MIN_OCR_DPI)
     zoom = dpi / 72.0
@@ -519,9 +536,11 @@ def _ocr_page(page: pymupdf.Page, lang: str, cfg: dict[str, Any]) -> tuple[str, 
     best_text = ""
     best_conf = 0.0
     best_score = -1e9
+    deadline = time.monotonic() + MAX_OCR_PAGE_SECONDS
+    timed_out = False
 
-    # Основной проход + альтернативы. Выбираем не только по уверенности:
-    # адаптивная бинаризация на мягких сканах может стереть цифры 1/0 в колонках.
+    # Main pass plus alternatives, but all Tesseract subprocesses share one
+    # page-level deadline so a pathological scan cannot multiply timeouts.
     passes = (
         ("adaptive", 3),
         ("light", 3),
@@ -533,10 +552,21 @@ def _ocr_page(page: pymupdf.Page, lang: str, cfg: dict[str, Any]) -> tuple[str, 
         variant = variants.get(name)
         if variant is None:
             continue
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            timed_out = True
+            break
         try:
-            words, conf = _ocr_words(variant, lang, psm)
+            words, conf = _ocr_words(variant, lang, psm, timeout=remaining)
         except Exception as exc:  # noqa: BLE001
             logger.debug("OCR pass %s/psm%s failed: %s", name, psm, exc)
+            is_timeout = (
+                isinstance(exc, RuntimeError)
+                and ("timeout" in str(exc).lower() or "timed out" in str(exc).lower())
+            )
+            if is_timeout or time.monotonic() >= deadline:
+                timed_out = True
+                break
             continue
         text = _words_to_text(words)
         if not text:
@@ -547,8 +577,8 @@ def _ocr_page(page: pymupdf.Page, lang: str, cfg: dict[str, Any]) -> tuple[str, 
             continue
         n_best = len(re.findall(r"\d+", best_text))
         n_alt = len(re.findall(r"\d+", text))
-        # Важное улучшение: вариант нашёл существенно больше чисел, которых
-        # почти нет в основном проходе (мелкие цифры в узких колонках).
+        # A variant that finds substantially more numbers can win despite a
+        # slightly lower confidence score, protecting small table figures.
         gained_numbers = n_alt > n_best and (
             n_alt >= n_best + 8 or (n_best >= 2 and n_alt >= n_best * 1.6)
         )
@@ -556,12 +586,41 @@ def _ocr_page(page: pymupdf.Page, lang: str, cfg: dict[str, Any]) -> tuple[str, 
         if (gained_numbers and conf >= best_conf - 3) or score > best_score + 3:
             best_words, best_text, best_conf, best_score = words, text, conf, score
 
-    if not best_text:
-        # Полный отказ всех проходов — вернём хоть что-то с первого варианта
-        best_words, best_conf = _ocr_words(variants["adaptive"], lang, 3)
-        best_text = _words_to_text(best_words)
-    return best_text, best_conf, best_words
+    if not best_text and not timed_out:
+        # If every regular pass failed, allow one final adaptive pass only
+        # while there is still time left in the same page budget.
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            try:
+                best_words, best_conf = _ocr_words(
+                    variants["adaptive"], lang, 3, timeout=remaining
+                )
+                best_text = _words_to_text(best_words)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("OCR fallback pass failed: %s", exc)
+                timed_out = (
+                    isinstance(exc, RuntimeError)
+                    and ("timeout" in str(exc).lower() or "timed out" in str(exc).lower())
+                ) or time.monotonic() >= deadline
+        else:
+            timed_out = True
 
+    if timed_out:
+        page_label = f"Стр. {page_number}" if page_number is not None else "Страница"
+        message = (
+            f"{page_label}: OCR остановлен — превышен лимит "
+            f"{MAX_OCR_PAGE_SECONDS:.0f} секунд на страницу."
+        )
+        if best_text:
+            message += " Использован лучший результат, полученный до тайм-аута."
+            if warnings is not None:
+                warnings.append(message)
+            else:
+                logger.warning(message)
+        else:
+            raise PDFResourceLimitError(message)
+
+    return best_text, best_conf, best_words
 
 def _ocr_headings(text: str) -> list[str]:
     headings = []
@@ -1897,7 +1956,9 @@ def extract_document(
                 if lang:
                     progress(pct, f"OCR страницы {idx + 1} из {page_total}")
                     try:
-                        ocr_text, ocr_conf, ocr_words = _ocr_page(page, lang, ocr_cfg)
+                        ocr_text, ocr_conf, ocr_words = _ocr_page(
+                            page, lang, ocr_cfg, page_number=idx + 1, warnings=warnings
+                        )
                         if ocr_text:
                             text = ocr_text
                             headings = _ocr_headings(ocr_text)
