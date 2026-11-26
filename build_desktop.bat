@@ -103,14 +103,7 @@ if not exist "dist\PDF Analyst\compliance\sbom-frontend.cdx.json" (
 echo [8/8] Building installer (Inno Setup)...
 if /I "%PDF_ANALYST_SKIP_INSTALLER%"=="1" (
   echo [INFO] Inno Setup step skipped by PDF_ANALYST_SKIP_INSTALLER=1.
-  goto :try_npm
-if defined NPM_CMD exit /b 0
-if not exist "%~1" exit /b 0
-call "%~1" --version >nul 2>nul
-if not errorlevel 1 set "NPM_CMD=%~1"
-exit /b 0
-
-:success
+  goto :success
 )
 set "ISCC="
 if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
@@ -154,3 +147,10 @@ exit /b 0
 echo.
 echo [ERROR] Build failed.
 exit /b 1
+
+:try_npm
+if defined NPM_CMD exit /b 0
+if not exist "%~1" exit /b 0
+call "%~1" --version >nul 2>nul
+if not errorlevel 1 set "NPM_CMD=%~1"
+exit /b 0
