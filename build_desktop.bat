@@ -12,45 +12,51 @@ if not exist ".venv\Scripts\python.exe" (
   echo [ERROR] .venv not found. Run setup.bat first.
   exit /b 1
 )
-
-set "PY=.venv\Scripts\python.exe"
-set "PIP=.venv\Scripts\pip.exe"
-
-echo [1/7] Installing desktop build dependencies...
-"%PIP%" install --upgrade pip
-if exist "requirements-desktop.txt" (
-  "%PIP%" install -r requirements-desktop.txt
-) else (
-  "%PIP%" install pyinstaller==6.* pywebview==5.*
+if not exist "requirements-desktop-lock.txt" (
+  echo [ERROR] requirements-desktop-lock.txt is missing.
+  echo         Run the Desktop lock GitHub Actions job and commit its validated artifact.
+  exit /b 1
 )
+
+set "PY_BOOTSTRAP=.venv\Scripts\python.exe"
+"%PY_BOOTSTRAP%" -c "import sys; raise SystemExit(0 if sys.version_info[:2] == (3,12) else 1)"
+if errorlevel 1 (
+  echo [ERROR] Release packaging requires CPython 3.12 x64.
+  echo         Recreate .venv with Python 3.12 and run setup.bat again.
+  exit /b 1
+)
+
+echo [1/7] Creating a clean release environment...
+if exist ".build-venv" rmdir /s /q ".build-venv"
+"%PY_BOOTSTRAP%" -m venv .build-venv
+if errorlevel 1 goto :fail
+set "PY=.build-venv\Scripts\python.exe"
+
+echo [1/7] Installing hash-pinned desktop dependencies...
+"%PY%" -m pip install --require-hashes -r requirements-desktop-lock.txt
 if errorlevel 1 goto :fail
 "%PY%" -m pip check
 if errorlevel 1 goto :fail
 
-echo [2/7] Running backend regression tests...
+echo [2/7] Running backend regression tests in the locked environment...
 "%PY%" -m pytest -q
 if errorlevel 1 goto :fail
 
-if not exist "frontend\dist\index.html" (
-  echo [3/7] Building frontend...
-  set "NPM_CMD="
-  where npm >nul 2>nul
-  if not errorlevel 1 set "NPM_CMD=npm"
-  if not defined NPM_CMD (
-    for /d %%d in ("%LOCALAPPDATA%\nodejs\node-*") do (
-      if exist "%%d\npm.cmd" set "NPM_CMD=%%d\npm.cmd"
-    )
+echo [3/7] Building frontend from package-lock.json...
+set "NPM_CMD="
+where npm >nul 2>nul
+if not errorlevel 1 set "NPM_CMD=npm"
+if not defined NPM_CMD (
+  for /d %%d in ("%LOCALAPPDATA%\nodejs\node-*") do (
+    if exist "%%d\npm.cmd" set "NPM_CMD=%%d\npm.cmd"
   )
-  if not defined NPM_CMD (
-    for /f "delims=" %%i in ('where node 2^>nul') do (
-      if exist "%%~dpi\npm.cmd" set "NPM_CMD=%%~dpi\npm.cmd"
-    )
+)
+if not defined NPM_CMD (
+  for /f "delims=" %%i in ('where node 2^>nul') do (
+    if exist "%%~dpi\npm.cmd" set "NPM_CMD=%%~dpi\npm.cmd"
   )
-  if not defined NPM_CMD (
-    echo [ERROR] Frontend dist is missing and npm not found.
-    echo         Install Node.js or provide frontend\dist.
-    exit /b 1
-  )
+)
+if defined NPM_CMD (
   pushd frontend
   call "%NPM_CMD%" ci
   if errorlevel 1 (
@@ -64,7 +70,12 @@ if not exist "frontend\dist\index.html" (
   )
   popd
 ) else (
-  echo [3/7] Frontend dist found - skipping build.
+  if not exist "frontend\dist\index.html" (
+    echo [ERROR] Node.js/npm is required to build the frontend.
+    exit /b 1
+  )
+  echo [WARN] Node.js/npm not found. Using the existing frontend\dist.
+  echo        For a reproducible release, install Node.js 22 and rebuild.
 )
 
 echo [4/7] Running PyInstaller...
