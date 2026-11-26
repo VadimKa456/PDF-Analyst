@@ -1,0 +1,30 @@
+name: PDFium spike (experimental)
+
+on:
+  pull_request:
+    paths:
+      - "backend/app/services/pdfium_spike.py"
+      - "backend/tests/test_pdfium_spike.py"
+      - "requirements-pdf-engine-spike.txt"
+      - ".github/workflows/pdfium-spike.yml"
+  workflow_dispatch:
+
+jobs:
+  pdfium-smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-pdf-engine-spike.txt
+      - name: Install project test dependencies and experimental engine
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-pdf-engine-spike.txt
+      - name: Run isolated PDFium smoke tests
+        working-directory: backend
+        run: python -m pytest -q tests/test_pdfium_spike.py
