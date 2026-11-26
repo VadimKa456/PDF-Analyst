@@ -11,7 +11,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.database import Base
+from app.api.settings import _validate_patch
+from fastapi import HTTPException
 from app.services.ai_client import AIClient, AIError
+from app.services.ai_url import validate_ai_base_url
 from app.services.query_engine import (
     _allowed_numbers,
     _docs_payload,
@@ -94,11 +97,64 @@ def test_ai_client_availability_does_not_require_network() -> None:
     assert AIClient({"ai_provider": "openai", "openai_api_key": ""}).available is False
     assert (
         AIClient(
-            {"ai_provider": "openai", "openai_api_key": "sk-x", "openai_base_url": "http://x/v1"}
+            {"ai_provider": "openai", "openai_api_key": "sk-x", "openai_base_url": "https://x/v1"}
         ).available
         is True
     )
+    assert (
+        AIClient(
+            {"ai_provider": "openai", "openai_api_key": "sk-x", "openai_base_url": "http://x/v1"}
+        ).available
+        is False
+    )
     assert AIClient({"ai_provider": "ollama", "ollama_base_url": "http://localhost:11434"}).available
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://provider.example/v1",
+        "http://192.168.1.20:11434",
+        "http://10.0.0.5:8000",
+        "https://provider.example/v1?mode=test",
+        "https://service.internal/v1",
+        "https://bad_host.example/v1",
+        "https://provider.example:0/v1",
+        "file:///tmp/sample",
+    ],
+)
+def test_ai_endpoint_validation_rejects_unsafe_urls(url: str) -> None:
+    with pytest.raises(ValueError):
+        validate_ai_base_url(url)
+
+
+def test_ai_endpoint_validation_allows_https_and_loopback_http() -> None:
+    assert validate_ai_base_url("https://provider.example/v1") == "https://provider.example/v1"
+    assert validate_ai_base_url("http://127.0.0.1:11434/") == "http://127.0.0.1:11434"
+
+
+def test_settings_reject_remote_ai_endpoints_over_plain_http() -> None:
+    with pytest.raises(HTTPException) as error:
+        _validate_patch({"openai_base_url": "http://provider.example/v1"})
+    assert error.value.status_code == 422
+    assert "HTTPS" in str(error.value.detail)
+
+
+def test_settings_preserve_inactive_legacy_ai_endpoint_but_block_activation() -> None:
+    # An inactive legacy LAN URL may remain saved while OpenAI is selected,
+    # but it must be rejected when Ollama becomes the active provider.
+    legacy_url = "http://192.168.1.20:11434"
+    patch = _validate_patch(
+        {"ai_provider": "openai", "ollama_base_url": legacy_url}
+    )
+    assert patch["ollama_base_url"] == legacy_url
+
+    with pytest.raises(HTTPException) as error:
+        _validate_patch(
+            {"ai_provider": "ollama", "ollama_base_url": legacy_url}
+        )
+    assert error.value.status_code == 422
+    assert "частные" in str(error.value.detail)
 
 
 def test_local_mode_never_calls_ai() -> None:
@@ -192,6 +248,11 @@ class _FakeOpenAIHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         type(self).seen.append((self.path, self.headers.get("Authorization")))
+        if self.path.startswith("/redirect/"):
+            self.send_response(302)
+            self.send_header("Location", "/v1/models")
+            self.end_headers()
+            return
         if self.path.endswith("/models"):
             self._send({"data": [{"id": "test-model"}]})
         else:
@@ -262,6 +323,24 @@ def test_openai_compatible_api_round_trip(fake_openai: str) -> None:
     paths = [path for path, _ in _FakeOpenAIHandler.seen]
     assert paths == ["/v1/chat/completions", "/v1/models", "/v1/embeddings"]
     assert all(auth == "Bearer sk-test" for _, auth in _FakeOpenAIHandler.seen)
+
+
+def test_openai_client_does_not_follow_redirects_with_api_key(fake_openai: str) -> None:
+    client = AIClient(
+        {
+            "ai_provider": "openai",
+            "openai_api_key": "sk-test",
+            "openai_base_url": fake_openai.replace("/v1", "/redirect/v1"),
+            "openai_model": "test-model",
+            "ai_timeout_seconds": 5,
+        }
+    )
+
+    with pytest.raises(AIError):
+        client.list_models()
+
+    paths = [path for path, _ in _FakeOpenAIHandler.seen]
+    assert paths == ["/redirect/v1/models"]
 
 
 def test_openai_retries_transient_503(fake_openai: str, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -380,3 +459,23 @@ def test_ai_answer_with_supported_numbers_is_accepted() -> None:
     allowed = _allowed_numbers(facts)
     ok, reason = _validate_ai_text("Выручка 120 млн руб., стр. 4.", allowed)
     assert ok and reason is None
+
+def test_openai_client_ignores_untrusted_proxy_environment(
+    fake_openai: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A user- or machine-level proxy must not silently receive the API key.
+    for name in ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"):
+        monkeypatch.setenv(name, "http://127.0.0.1:1")
+    monkeypatch.setenv("NO_PROXY", "")
+    monkeypatch.setenv("no_proxy", "")
+
+    client = AIClient(
+        {
+            "ai_provider": "openai",
+            "openai_api_key": "sk-test",
+            "openai_base_url": fake_openai,
+            "openai_model": "test-model",
+            "ai_timeout_seconds": 5,
+        }
+    )
+    assert client.list_models() == ["test-model"]

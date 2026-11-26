@@ -54,15 +54,16 @@ def test_ocr_numbers_with_lost_thousand_separators_are_merged(
     revenue = [m for m in scanned.metrics if metric_concept(m.label) == "revenue"]
     assert revenue
     by_period = {m.period: m for m in revenue}
-    assert by_period["2024"].value == 1_661_152
-    assert by_period["2023"].value == 1_440_986
+    # Values are fixed by samples/generate_samples.py (seed=42); assert exact source values.
+    assert by_period["2024"].value == 1_660_936
+    assert by_period["2023"].value == 1_440_892
     assert by_period["2024"].unit == "тыс. руб."
     assert by_period["2024"].page_number == 1
     assert by_period["2024"].source_kind == "table"
     assert by_period["2024"].source_ref.startswith("p1:")
     # значение не потеряло разряды и нормализовано с учётом тыс. руб.
-    assert by_period["2024"].normalized_value == pytest.approx(1_661_152_000.0)
-    assert "1661 152" in (by_period["2024"].context or "")
+    assert by_period["2024"].normalized_value == pytest.approx(1_660_936_000.0)
+    assert "1 660 936" in (by_period["2024"].context or "")
 
 
 def test_ocr_metrics_keep_sources_and_confidence(scanned: DocumentExtraction) -> None:

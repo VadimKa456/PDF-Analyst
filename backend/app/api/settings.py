@@ -12,6 +12,7 @@ from ..database import get_db
 from ..models import Chunk, Document, Metric
 from ..schemas import SettingsUpdate
 from ..services.ai_client import AIClient
+from ..services.ai_url import validate_ai_base_url
 from ..services.pdf_processor import configure_tesseract, tesseract_status
 from ..services.runtime_settings import (
     get_runtime_settings,
@@ -54,6 +55,25 @@ def get_settings(db: Session = Depends(get_db)):
 
 
 def _validate_patch(patch: dict[str, Any]) -> dict[str, Any]:
+    selected_provider = str(patch.get("ai_provider") or "").lower()
+    for key, provider, label in (
+        ("openai_base_url", "openai", "OpenAI-compatible endpoint"),
+        ("ollama_base_url", "ollama", "Ollama endpoint"),
+    ):
+        # Validate the active provider, or a URL updated independently. Preserve
+        # inactive legacy settings; they are validated before that provider is used.
+        if (
+            key in patch
+            and patch[key]
+            and (not selected_provider or selected_provider == provider)
+        ):
+            try:
+                patch[key] = validate_ai_base_url(
+                    str(patch[key]), setting_name=label
+                )
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+
     if "ai_provider" in patch and patch["ai_provider"] not in {"none", "openai", "ollama"}:
         raise HTTPException(422, "Провайдер AI должен быть none, openai или ollama")
     if "interface_language" in patch and patch["interface_language"] not in {"ru", "en"}:
@@ -143,6 +163,19 @@ def _runtime_with_overrides(db: Session, body: dict[str, Any] | None) -> dict[st
             runtime[key] = overrides[key]
     if overrides.get("openai_api_key") == "__clear__":
         runtime["openai_api_key"] = ""
+
+    selected_endpoint = {
+        "openai": ("openai_base_url", "OpenAI-compatible endpoint"),
+        "ollama": ("ollama_base_url", "Ollama endpoint"),
+    }.get(str(runtime.get("ai_provider") or "none").lower())
+    if selected_endpoint:
+        key, label = selected_endpoint
+        configured_url = str(runtime.get(key) or "").strip()
+        if configured_url:
+            try:
+                runtime[key] = validate_ai_base_url(configured_url, setting_name=label)
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
     return runtime
 
 

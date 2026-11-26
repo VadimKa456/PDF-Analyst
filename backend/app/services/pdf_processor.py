@@ -7,9 +7,11 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 import re
 import shutil
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -39,6 +41,28 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 ProgressCallback = Callable[[int, str], None]
+
+# Defensive processing ceilings for untrusted PDF files. The byte limit follows
+# the upload setting; page, text and raster limits protect CPU/memory use.
+MAX_PDF_PAGES = 500
+MAX_PDF_FILE_BYTES = 1000 * 1024 * 1024
+MAX_PAGE_TEXT_CHARS = 500_000
+MAX_DOCUMENT_TEXT_CHARS = 5_000_000
+MAX_PAGE_PIXELS = 12_000_000
+MAX_TABLES_PER_PAGE = 100
+MAX_TABLE_CELLS = 20_000
+MAX_DOCUMENT_TABLES = 2_000
+MAX_DOCUMENT_TABLE_CELLS = 100_000
+MAX_DOCUMENT_METRICS = 50_000
+MIN_OCR_DPI = 150
+MIN_PREVIEW_DPI = 36
+MAX_OCR_PAGE_SECONDS = 30.0
+MAX_DOCUMENT_PROCESS_SECONDS = 900.0
+
+
+class PDFResourceLimitError(ValueError):
+    """A PDF exceeds a documented processing or rendering resource ceiling."""
+
 
 METRIC_KEYWORDS = (
     "выручк", "доход", "расход", "прибыл", "убыт", "себестоим", "валов", "операцион",
@@ -144,6 +168,7 @@ def _ocr_config(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
         "min_confidence": settings.ocr_min_confidence,
         "auto": settings.ocr_auto,
         "tesseract_cmd": "",
+        "max_file_bytes": MAX_PDF_FILE_BYTES,
     }
     if overrides:
         for key, value in overrides.items():
@@ -287,7 +312,14 @@ def _preprocess_for_ocr(image: Image.Image, threshold: bool = True) -> Image.Ima
         target = 2000
         if gray.shape[1] < target:
             scale = target / gray.shape[1]
-            gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+            source_pixels = int(gray.shape[0]) * int(gray.shape[1])
+            if source_pixels > 0:
+                safe_scale = math.sqrt(MAX_PAGE_PIXELS / source_pixels)
+                scale = min(scale, safe_scale)
+            if scale > 1.0:
+                gray = cv2.resize(
+                    gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC
+                )
         gray = _deskew_image(gray)
         gray = cv2.fastNlMeansDenoising(gray, h=10)
         if not threshold:
@@ -361,13 +393,21 @@ def _ocr_quality(text: str, mean_conf: float) -> float:
 _BORDER_NOISE_RE = re.compile(r"^[|_=~^<>\[\]{}()/\\•·\-–—]+$")
 
 
-def _ocr_words(image: Image.Image, lang: str, psm: int) -> tuple[list[dict[str, Any]], float]:
-    data = pytesseract.image_to_data(
-        image,
-        lang=lang,
-        config=f"--oem 3 --psm {psm}",
-        output_type=pytesseract.Output.DICT,
-    )
+def _ocr_words(
+    image: Image.Image,
+    lang: str,
+    psm: int,
+    *,
+    timeout: float | None = None,
+) -> tuple[list[dict[str, Any]], float]:
+    kwargs: dict[str, Any] = {
+        "lang": lang,
+        "config": f"--oem 3 --psm {psm}",
+        "output_type": pytesseract.Output.DICT,
+    }
+    if timeout is not None:
+        kwargs["timeout"] = max(0.1, float(timeout))
+    data = pytesseract.image_to_data(image, **kwargs)
     words: list[dict[str, Any]] = []
     confidences: list[float] = []
     texts = data.get("text", [])
@@ -452,8 +492,45 @@ def _ocr_score(text: str, confidence: float, reference_len: int = 0) -> float:
     return score
 
 
-def _ocr_page(page: pymupdf.Page, lang: str, cfg: dict[str, Any]) -> tuple[str, float, list[dict[str, Any]]]:
-    dpi = max(150, min(int(cfg.get("dpi") or 300), 600))
+def _bounded_page_dpi(
+    page: pymupdf.Page,
+    requested_dpi: int,
+    *,
+    minimum_dpi: int,
+    max_pixels: int = MAX_PAGE_PIXELS,
+) -> int:
+    """Return a safe raster DPI or reject pages that cannot be rendered safely."""
+    rect = page.rect
+    width_pt = abs(float(rect.width))
+    height_pt = abs(float(rect.height))
+    if (
+        not math.isfinite(width_pt)
+        or not math.isfinite(height_pt)
+        or width_pt <= 0
+        or height_pt <= 0
+    ):
+        raise PDFResourceLimitError("Некорректный размер страницы PDF.")
+    requested = max(minimum_dpi, min(int(requested_dpi), 600))
+    max_dpi = math.floor(math.sqrt(max_pixels * 72.0 * 72.0 / (width_pt * height_pt)))
+    effective = min(requested, max_dpi)
+    if effective < minimum_dpi:
+        raise PDFResourceLimitError(
+            "Страница PDF слишком большая для безопасной растеризации "
+            f"(лимит {max_pixels:,} пикселей; минимальное разрешение {minimum_dpi} DPI)."
+        )
+    return effective
+
+
+def _ocr_page(
+    page: pymupdf.Page,
+    lang: str,
+    cfg: dict[str, Any],
+    *,
+    page_number: int | None = None,
+    warnings: list[str] | None = None,
+) -> tuple[str, float, list[dict[str, Any]]]:
+    requested_dpi = max(MIN_OCR_DPI, min(int(cfg.get("dpi") or 300), 600))
+    dpi = _bounded_page_dpi(page, requested_dpi, minimum_dpi=MIN_OCR_DPI)
     zoom = dpi / 72.0
     pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
     image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
@@ -463,9 +540,11 @@ def _ocr_page(page: pymupdf.Page, lang: str, cfg: dict[str, Any]) -> tuple[str, 
     best_text = ""
     best_conf = 0.0
     best_score = -1e9
+    deadline = time.monotonic() + MAX_OCR_PAGE_SECONDS
+    timed_out = False
 
-    # Основной проход + альтернативы. Выбираем не только по уверенности:
-    # адаптивная бинаризация на мягких сканах может стереть цифры 1/0 в колонках.
+    # Main pass plus alternatives, but all Tesseract subprocesses share one
+    # page-level deadline so a pathological scan cannot multiply timeouts.
     passes = (
         ("adaptive", 3),
         ("light", 3),
@@ -477,10 +556,21 @@ def _ocr_page(page: pymupdf.Page, lang: str, cfg: dict[str, Any]) -> tuple[str, 
         variant = variants.get(name)
         if variant is None:
             continue
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            timed_out = True
+            break
         try:
-            words, conf = _ocr_words(variant, lang, psm)
+            words, conf = _ocr_words(variant, lang, psm, timeout=remaining)
         except Exception as exc:  # noqa: BLE001
             logger.debug("OCR pass %s/psm%s failed: %s", name, psm, exc)
+            is_timeout = (
+                isinstance(exc, RuntimeError)
+                and ("timeout" in str(exc).lower() or "timed out" in str(exc).lower())
+            )
+            if is_timeout or time.monotonic() >= deadline:
+                timed_out = True
+                break
             continue
         text = _words_to_text(words)
         if not text:
@@ -491,8 +581,8 @@ def _ocr_page(page: pymupdf.Page, lang: str, cfg: dict[str, Any]) -> tuple[str, 
             continue
         n_best = len(re.findall(r"\d+", best_text))
         n_alt = len(re.findall(r"\d+", text))
-        # Важное улучшение: вариант нашёл существенно больше чисел, которых
-        # почти нет в основном проходе (мелкие цифры в узких колонках).
+        # A variant that finds substantially more numbers can win despite a
+        # slightly lower confidence score, protecting small table figures.
         gained_numbers = n_alt > n_best and (
             n_alt >= n_best + 8 or (n_best >= 2 and n_alt >= n_best * 1.6)
         )
@@ -500,10 +590,40 @@ def _ocr_page(page: pymupdf.Page, lang: str, cfg: dict[str, Any]) -> tuple[str, 
         if (gained_numbers and conf >= best_conf - 3) or score > best_score + 3:
             best_words, best_text, best_conf, best_score = words, text, conf, score
 
-    if not best_text:
-        # Полный отказ всех проходов — вернём хоть что-то с первого варианта
-        best_words, best_conf = _ocr_words(variants["adaptive"], lang, 3)
-        best_text = _words_to_text(best_words)
+    if not best_text and not timed_out:
+        # If every regular pass failed, allow one final adaptive pass only
+        # while there is still time left in the same page budget.
+        remaining = deadline - time.monotonic()
+        if remaining > 0:
+            try:
+                best_words, best_conf = _ocr_words(
+                    variants["adaptive"], lang, 3, timeout=remaining
+                )
+                best_text = _words_to_text(best_words)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("OCR fallback pass failed: %s", exc)
+                timed_out = (
+                    isinstance(exc, RuntimeError)
+                    and ("timeout" in str(exc).lower() or "timed out" in str(exc).lower())
+                ) or time.monotonic() >= deadline
+        else:
+            timed_out = True
+
+    if timed_out:
+        page_label = f"Стр. {page_number}" if page_number is not None else "Страница"
+        message = (
+            f"{page_label}: OCR остановлен — превышен лимит "
+            f"{MAX_OCR_PAGE_SECONDS:.0f} секунд на страницу."
+        )
+        if best_text:
+            message += " Использован лучший результат, полученный до тайм-аута."
+            if warnings is not None:
+                warnings.append(message)
+            else:
+                logger.warning(message)
+        else:
+            raise PDFResourceLimitError(message)
+
     return best_text, best_conf, best_words
 
 
@@ -613,6 +733,10 @@ def _ocr_tables_from_words(
         for next_row, data_cells in parsed_rows[idx + 1:]:
             joined = " ".join(c["text"] for c in data_cells)
             if not joined.strip():
+                continue
+            # Ignore OCR-only separators/borders (for example a row containing
+            # just "|" between the table header and its first data row).
+            if not re.search(r"[0-9A-Za-zА-Яа-яЁё]", joined):
                 continue
             # Конец таблицы: подписи/реквизиты после неё
             if re.search(r"(?:начальник|ознакомлен|подпись|должность|ФИО)", joined, re.I):
@@ -1767,6 +1891,16 @@ def extract_document(
     import time
 
     started = time.perf_counter()
+    deadline = time.monotonic() + MAX_DOCUMENT_PROCESS_SECONDS
+
+    def check_deadline(page_number: int | None = None) -> None:
+        if time.monotonic() >= deadline:
+            page_label = f" на странице {page_number}" if page_number is not None else ""
+            raise PDFResourceLimitError(
+                "Превышен общий лимит времени обработки PDF "
+                f"({MAX_DOCUMENT_PROCESS_SECONDS:.0f} секунд){page_label}."
+            )
+
     ocr_cfg = _ocr_config(ocr_config)
     path = Path(path)
     warnings: list[str] = []
@@ -1779,13 +1913,30 @@ def extract_document(
             on_progress(max(0, min(100, pct)), stage)
 
     progress(3, "Открытие PDF")
+    try:
+        file_size = path.stat().st_size
+    except OSError as exc:
+        raise ValueError(f"Не удалось прочитать PDF: {exc}") from exc
+    max_file_bytes = max(1, int(ocr_cfg.get("max_file_bytes") or settings.max_upload_mb * 1024 * 1024))
+    if file_size > max_file_bytes:
+        raise PDFResourceLimitError(
+            f"PDF превышает допустимый размер {max_file_bytes // (1024 * 1024)} МБ."
+        )
+
     doc = pymupdf.open(str(path))
     if doc.needs_pass:
         if not doc.authenticate(""):
+            doc.close()
             raise ValueError("PDF защищён паролем. Поддерживаются только документы без пароля.")
     page_total = doc.page_count
     if page_total == 0:
+        doc.close()
         raise ValueError("PDF не содержит страниц.")
+    if page_total > MAX_PDF_PAGES:
+        doc.close()
+        raise PDFResourceLimitError(
+            f"В PDF {page_total} страниц; безопасный предел обработки — {MAX_PDF_PAGES}."
+        )
 
     try:
         first_text = clean_text(doc[0].get_text("text"))[:8000]
@@ -1797,6 +1948,9 @@ def extract_document(
     warnings.extend(ocr_warnings)
 
     plumber_doc = None
+    total_text_chars = 0
+    total_table_cells = 0
+    table_budget_warned = False
     try:
         import pdfplumber
 
@@ -1805,11 +1959,19 @@ def extract_document(
         warnings.append(f"pdfplumber недоступен для этого файла: {exc}")
 
     try:
+        check_deadline()
         for idx in range(page_total):
+            check_deadline(idx + 1)
             page = doc[idx]
             pct = 5 + int((idx / max(1, page_total)) * 65)
             progress(pct, f"Извлечение страницы {idx + 1} из {page_total}")
             text, headings = _extract_text_page(page)
+            check_deadline(idx + 1)
+            if len(text) > MAX_PAGE_TEXT_CHARS:
+                raise PDFResourceLimitError(
+                    f"Страница {idx + 1} содержит слишком много текста "
+                    f"(>{MAX_PAGE_TEXT_CHARS:,} символов)."
+                )
             method = "text"
             confidence = 0.98
             ocr_words: list[dict[str, Any]] = []
@@ -1818,7 +1980,9 @@ def extract_document(
                 if lang:
                     progress(pct, f"OCR страницы {idx + 1} из {page_total}")
                     try:
-                        ocr_text, ocr_conf, ocr_words = _ocr_page(page, lang, ocr_cfg)
+                        ocr_text, ocr_conf, ocr_words = _ocr_page(
+                            page, lang, ocr_cfg, page_number=idx + 1, warnings=warnings
+                        )
                         if ocr_text:
                             text = ocr_text
                             headings = _ocr_headings(ocr_text)
@@ -1838,15 +2002,29 @@ def extract_document(
                 else:
                     warnings.append(f"Стр. {idx + 1}: требуется OCR, но Tesseract недоступен.")
 
+            # OCR can generate more text than the original searchable layer;
+            # enforce the same page ceiling before table/metric extraction.
+            if len(text) > MAX_PAGE_TEXT_CHARS:
+                raise PDFResourceLimitError(
+                    f"Страница {idx + 1} содержит слишком много текста "
+                    f"(>{MAX_PAGE_TEXT_CHARS:,} символов)."
+                )
+
             page_tables: list[ExtractedTable] = []
             if method == "text":
                 page_tables.extend(_extract_tables_pymupdf(page, text))
                 if not page_tables and plumber_doc is not None:
-                    try:
-                        plumber_page = plumber_doc.pages[idx]
-                        page_tables.extend(_extract_tables_pdfplumber(plumber_page, text))
-                    except Exception as exc:  # noqa: BLE001
-                        logger.debug("pdfplumber page failed: %s", exc)
+                    if len(text) > 200_000:
+                        warnings.append(
+                            f"Стр. {idx + 1}: альтернативное извлечение таблиц пропущено "
+                            "из-за большого объёма текста."
+                        )
+                    else:
+                        try:
+                            plumber_page = plumber_doc.pages[idx]
+                            page_tables.extend(_extract_tables_pdfplumber(plumber_page, text))
+                        except Exception as exc:  # noqa: BLE001
+                            logger.debug("pdfplumber page failed: %s", exc)
             elif method == "ocr" and ocr_words:
                 try:
                     page_tables.extend(
@@ -1854,17 +2032,57 @@ def extract_document(
                     )
                 except Exception as exc:  # noqa: BLE001
                     logger.debug("OCR table rebuild failed: %s", exc)
+            # Ограничиваем объём структур, которые сохраняются и индексируются.
+            if len(page_tables) > MAX_TABLES_PER_PAGE:
+                warnings.append(
+                    f"Стр. {idx + 1}: найдено таблиц больше лимита "
+                    f"{MAX_TABLES_PER_PAGE}; лишние таблицы пропущены."
+                )
+                page_tables = page_tables[:MAX_TABLES_PER_PAGE]
+
             # дедупликация таблиц
             seen: set[str] = set()
             for t in page_tables:
+                cell_count = len(t.headers) + sum(len(row) for row in t.rows)
+                if cell_count > MAX_TABLE_CELLS:
+                    warnings.append(
+                        f"Стр. {idx + 1}: таблица пропущена — "
+                        f"число ячеек превышает лимит {MAX_TABLE_CELLS:,}."
+                    )
+                    continue
                 sig = _table_signature(t.headers, t.rows)
                 if sig in seen:
                     continue
                 seen.add(sig)
+                if (
+                    len(tables) >= MAX_DOCUMENT_TABLES
+                    or total_table_cells + cell_count > MAX_DOCUMENT_TABLE_CELLS
+                ):
+                    if not table_budget_warned:
+                        warnings.append(
+                            "Достигнут общий лимит табличных данных документа "
+                            f"({MAX_DOCUMENT_TABLES:,} таблиц / "
+                            f"{MAX_DOCUMENT_TABLE_CELLS:,} ячеек); оставшиеся таблицы пропущены."
+                        )
+                        table_budget_warned = True
+                    continue
                 tables.append(t)
+                total_table_cells += cell_count
                 metrics.extend(_table_metrics(t, default_period, page_text=text))
             metrics.extend(_header_kv_metrics(text, idx + 1, default_period, confidence))
             metrics.extend(_text_metrics(text, idx + 1, default_period, confidence))
+            if len(metrics) > MAX_DOCUMENT_METRICS:
+                raise PDFResourceLimitError(
+                    "Документ содержит слишком много извлечённых показателей "
+                    f"(>{MAX_DOCUMENT_METRICS:,})."
+                )
+            check_deadline(idx + 1)
+            total_text_chars += len(text)
+            if total_text_chars > MAX_DOCUMENT_TEXT_CHARS:
+                raise PDFResourceLimitError(
+                    "Документ содержит слишком много извлечённого текста "
+                    f"(>{MAX_DOCUMENT_TEXT_CHARS:,} символов)."
+                )
             pages.append(
                 PageData(
                     number=idx + 1,
@@ -1878,10 +2096,13 @@ def extract_document(
                 )
             )
 
+        check_deadline()
         progress(78, "Удаление дублей и проверка качества")
         # дедупликация показателей (текст и таблицы часто дублируют друг друга)
         unique: dict[tuple, ExtractedMetric] = {}
-        for m in metrics:
+        for metric_index, m in enumerate(metrics):
+            if metric_index % 1000 == 0:
+                check_deadline()
             key = (
                 m.normalized_label,
                 m.period,
@@ -1908,6 +2129,7 @@ def extract_document(
             )
         if not tables:
             warnings.append("Таблицы не обнаружены — показатели извлечены из текста.")
+        check_deadline()
         progress(92, "Сохранение результатов")
         ms = int((time.perf_counter() - started) * 1000)
         return DocumentExtraction(
@@ -1936,7 +2158,10 @@ def render_page_png(path: str | Path, page_number: int, dpi: int = 110) -> bytes
         if page_number < 1 or page_number > doc.page_count:
             raise ValueError("Страница не найдена")
         page = doc[page_number - 1]
-        zoom = dpi / 72.0
+        effective_dpi = _bounded_page_dpi(
+            page, dpi, minimum_dpi=MIN_PREVIEW_DPI
+        )
+        zoom = effective_dpi / 72.0
         pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
         return pix.tobytes("png")
     finally:

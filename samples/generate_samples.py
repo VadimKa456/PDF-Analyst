@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import io
+import os
 import random
 from pathlib import Path
 
@@ -20,7 +21,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 ROOT = Path(__file__).resolve().parent
-OUT = ROOT / "pdfs"
+OUT = Path(os.environ.get("PDF_ANALYST_SAMPLES_DIR", str(ROOT / "pdfs"))).resolve()
 FONT_DIR = Path(__file__).resolve().parents[1] / "frontend" / "node_modules"  # не используется
 
 import matplotlib
@@ -292,7 +293,12 @@ def build_scanned_pdf(path: Path) -> None:
         dividend_change=True,
     )
     src = pymupdf.open(str(source))
-    pix = src[0].get_pixmap(matrix=pymupdf.Matrix(2.2, 2.2), alpha=False)
+    # Generate the synthetic scan at the same 300 DPI used by the OCR pipeline.
+    # Lower-resolution source rasters can make exact financial digits unstable
+    # across Tesseract builds even when the OCR stage later upscales them.
+    scan_dpi = 300
+    scale = scan_dpi / 72.0
+    pix = src[0].get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False)
     png = pix.tobytes("png")
     src.close()
     c = canvas.Canvas(str(path), pagesize=A4)

@@ -1,5 +1,9 @@
 name: CI
 
+concurrency:
+  group: pdf-analyst-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main, master]
@@ -22,8 +26,125 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r ..\requirements.txt
+      - name: Install pinned Tesseract OCR and Russian language data
+        shell: pwsh
+        run: ..\tools\install_tesseract_ci.ps1
+      - name: Generate isolated synthetic PDF fixtures
+        env:
+          PDF_ANALYST_SAMPLES_DIR: ${{ runner.temp }}\pdf-analyst-test-pdfs
+        run: python ..\samples\generate_samples.py
       - name: Run tests
+        env:
+          PDF_ANALYST_SAMPLES_DIR: ${{ runner.temp }}\pdf-analyst-test-pdfs
         run: python -m pytest -q
+      - name: Generate Python dependency inventory
+        run: python ..\tools\generate_compliance_inventory.py --python-only --output-dir "${{ runner.temp }}\pdf-analyst-compliance\python"
+      - name: Upload Python SBOM and license inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-analyst-python-compliance
+          path: ${{ runner.temp }}/pdf-analyst-compliance/python/
+          if-no-files-found: error
+
+
+  desktop-lock:
+    name: Desktop lock (Windows, Python 3.12)
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned lock generator
+        run: |
+          python -m pip install pip==26.3
+          python -m pip install pip-tools==7.7.0
+      - name: Compile hash-pinned desktop requirements
+        run: python -m piptools compile --resolver=backtracking --generate-hashes --allow-unsafe --output-file=requirements-desktop-lock.txt requirements-desktop.in
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build frontend for the portable desktop package
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+      - name: Create bootstrap Python 3.12 environment
+        run: python -m venv .venv
+      - name: Install pinned Tesseract OCR and Russian language data
+        shell: pwsh
+        run: .\tools\install_tesseract_ci.ps1
+      - name: Build portable desktop application from the hash lock
+        env:
+          PDF_ANALYST_SKIP_INSTALLER: "1"
+          PDF_ANALYST_FRONTEND_READY: "1"
+        shell: pwsh
+        run: |
+          cmd /c build_desktop.bat
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify portable EXE and compliance inventory
+        shell: pwsh
+        run: |
+          $required = @(
+            "dist\\PDF Analyst\\PDF Analyst.exe",
+            "dist\\PDF Analyst\\compliance\\sbom-python.cdx.json",
+            "dist\\PDF Analyst\\compliance\\sbom-frontend.cdx.json",
+            "dist\\PDF Analyst\\compliance\\THIRD_PARTY_NOTICES.md",
+            "dist\\PDF Analyst\\compliance\\python-environment.txt"
+          )
+          foreach ($file in $required) {
+            if (-not (Test-Path $file)) { throw "Required build output missing: $file" }
+          }
+      - name: Upload validated desktop lock and compliance inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-analyst-desktop-lock
+          path: |
+            requirements-desktop-lock.txt
+            dist/PDF Analyst/compliance/
+          if-no-files-found: error
+      - name: Upload portable Windows smoke build
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-analyst-portable-smoke-build
+          path: dist/PDF Analyst/
+          compression-level: 1
+          if-no-files-found: error
+      - name: Smoke-test packaged desktop API and session protection
+        shell: pwsh
+        env:
+          HOST: "0.0.0.0"
+          PORT: "18765"
+        run: |
+          $exe = (Resolve-Path "dist/PDF Analyst/PDF Analyst.exe").Path
+          $process = Start-Process -FilePath $exe -ArgumentList "--headless-smoke" -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            $log = Join-Path $env:LOCALAPPDATA "PDF Analyst/logs/desktop.log"
+            if (Test-Path $log) { Get-Content $log -Tail 120 }
+            throw "Packaged desktop smoke failed with exit code $($process.ExitCode)"
+          }
+      - name: Commit the validated lock to the PR branch
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add requirements-desktop-lock.txt
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "build: add hash-pinned desktop dependency lock"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            git push origin "HEAD:$env:BRANCH_NAME"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
   frontend:
     name: Frontend (typecheck + build)
@@ -40,3 +161,15 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run build
+      - name: Set up Python for lockfile inventory
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Generate frontend dependency inventory
+        run: python ..\tools\generate_compliance_inventory.py --frontend-only --frontend-node-modules node_modules --output-dir "${{ runner.temp }}\pdf-analyst-compliance\frontend"
+      - name: Upload frontend SBOM and license inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-analyst-frontend-compliance
+          path: ${{ runner.temp }}/pdf-analyst-compliance/frontend/
+          if-no-files-found: error

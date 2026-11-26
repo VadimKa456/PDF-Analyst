@@ -3,14 +3,23 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from types import SimpleNamespace
 
+from PIL import Image
+
+import pymupdf
 import pytest
 
 from app.services.analytics import metric_concept
 from app.services.pdf_processor import (
     DocumentExtraction,
     ExtractedTable,
+    PDFResourceLimitError,
+    MAX_PAGE_TEXT_CHARS,
+    _bounded_page_dpi,
     _clean_metric_label,
+    _ocr_page,
+    _ocr_words,
     _table_metrics,
     extract_document,
     render_page_png,
@@ -112,6 +121,57 @@ def test_render_page_png_returns_valid_png(alpha_2024_pdf: Path) -> None:
         render_page_png(alpha_2024_pdf, 99)
 
 
+def test_pdf_processing_rejects_more_than_page_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "many-pages.pdf"
+    doc = pymupdf.open()
+    doc.new_page()
+    doc.new_page()
+    doc.save(path)
+    doc.close()
+
+    monkeypatch.setattr("app.services.pdf_processor.MAX_PDF_PAGES", 1)
+    with pytest.raises(PDFResourceLimitError, match="предел обработки"):
+        extract_document(path, path.name, ocr_config={"enabled": False})
+
+
+def test_pdf_processing_rejects_file_over_configured_byte_limit(tmp_path: Path) -> None:
+    path = tmp_path / "too-large.pdf"
+    path.write_bytes(b"%PDF-1.7\n" + b"x" * 100)
+    with pytest.raises(PDFResourceLimitError, match="допустимый размер"):
+        extract_document(
+            path,
+            path.name,
+            ocr_config={"enabled": False, "max_file_bytes": 50},
+        )
+
+
+def test_ocr_raster_dpi_is_reduced_to_pixel_budget() -> None:
+    page = SimpleNamespace(
+        rect=SimpleNamespace(width=1000.0, height=1000.0)
+    )
+    dpi = _bounded_page_dpi(page, 300, minimum_dpi=150)
+    assert 150 <= dpi < 300
+    assert (1000 * dpi / 72) * (1000 * dpi / 72) <= 12_000_000
+
+
+def test_ocr_skips_pages_that_cannot_fit_safe_pixel_budget() -> None:
+    page = SimpleNamespace(
+        rect=SimpleNamespace(width=14_400.0, height=14_400.0)
+    )
+    with pytest.raises(PDFResourceLimitError, match="слишком большая"):
+        _bounded_page_dpi(page, 300, minimum_dpi=150)
+
+
+def test_preview_dpi_is_reduced_for_large_pages() -> None:
+    page = SimpleNamespace(
+        rect=SimpleNamespace(width=3_000.0, height=3_000.0)
+    )
+    dpi = _bounded_page_dpi(page, 120, minimum_dpi=36)
+    assert 36 <= dpi < 120
+
+
 def _statement_table(rows: list[list[str]]) -> ExtractedTable:
     return ExtractedTable(
         page_number=1,
@@ -210,3 +270,230 @@ def test_table_metrics_prefix_subitems_with_their_section() -> None:
     assert len(revenue) == 2 and len(cost) == 2
     assert all(m.value > 0 for m in revenue)
     assert all(m.value < 0 for m in cost)
+
+def test_ocr_words_forwards_subprocess_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_image_to_data(_image, **kwargs):
+        captured.update(kwargs)
+        return {"text": [], "conf": []}
+
+    monkeypatch.setattr(
+        "app.services.pdf_processor.pytesseract.image_to_data",
+        fake_image_to_data,
+    )
+    _ocr_words(Image.new("RGB", (1, 1)), "eng", 3, timeout=4.25)
+
+    assert captured["timeout"] == 4.25
+
+
+def test_ocr_page_stops_after_tesseract_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakePage:
+        rect = SimpleNamespace(width=72.0, height=72.0)
+
+        def get_pixmap(self, **_kwargs):
+            return SimpleNamespace(
+                width=150,
+                height=150,
+                samples=bytes(150 * 150 * 3),
+            )
+
+    monkeypatch.setattr(
+        "app.services.pdf_processor._preprocess_variants",
+        lambda _image: {"adaptive": object(), "light": object(), "otsu": object()},
+    )
+    monkeypatch.setattr("app.services.pdf_processor.MAX_OCR_PAGE_SECONDS", 1.5)
+
+    calls: list[float] = []
+
+    def timed_out(_image, _lang, _psm, *, timeout: float):
+        calls.append(timeout)
+        raise RuntimeError("Tesseract process timeout")
+
+    monkeypatch.setattr("app.services.pdf_processor._ocr_words", timed_out)
+
+    with pytest.raises(PDFResourceLimitError, match="OCR остановлен"):
+        _ocr_page(FakePage(), "eng", {"dpi": 150}, page_number=4)
+
+    assert len(calls) == 1
+    assert 0 < calls[0] <= 1.5
+
+
+def test_ocr_page_keeps_best_pass_when_later_pass_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakePage:
+        rect = SimpleNamespace(width=72.0, height=72.0)
+
+        def get_pixmap(self, **_kwargs):
+            return SimpleNamespace(
+                width=150,
+                height=150,
+                samples=bytes(150 * 150 * 3),
+            )
+
+    monkeypatch.setattr(
+        "app.services.pdf_processor._preprocess_variants",
+        lambda _image: {"adaptive": object(), "light": object(), "otsu": object()},
+    )
+    calls = 0
+
+    def one_good_pass_then_timeout(_image, _lang, _psm, *, timeout: float):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return (
+                [{
+                    "text": "Revenue",
+                    "left": 0,
+                    "width": 40,
+                    "height": 12,
+                    "block": 1,
+                    "par": 1,
+                    "line": 1,
+                }],
+                92.0,
+            )
+        raise RuntimeError("Tesseract process timeout")
+
+    monkeypatch.setattr(
+        "app.services.pdf_processor._ocr_words", one_good_pass_then_timeout
+    )
+    warnings: list[str] = []
+
+    text, confidence, words = _ocr_page(
+        FakePage(),
+        "eng",
+        {"dpi": 150},
+        page_number=7,
+        warnings=warnings,
+    )
+
+    assert text == "Revenue"
+    assert confidence == 92.0
+    assert words
+    assert calls == 2
+    assert len(warnings) == 1
+    assert "Стр. 7" in warnings[0]
+    assert "тайм-аут" in warnings[0]
+
+def test_pdf_processing_enforces_total_time_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "time-budget.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "Annual revenue 2025: 120")
+    doc.save(path)
+    doc.close()
+
+    monkeypatch.setattr(
+        "app.services.pdf_processor.MAX_DOCUMENT_PROCESS_SECONDS", 0.0
+    )
+    with pytest.raises(PDFResourceLimitError, match="общий лимит времени"):
+        extract_document(path, path.name, ocr_config={"enabled": False})
+
+def _make_one_page_pdf(path: Path, text: str = "Annual report summary 2024.") -> None:
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), text)
+    doc.save(path)
+    doc.close()
+
+
+def test_ocr_output_is_checked_against_page_text_limit_before_table_extraction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "oversized-ocr-text.pdf"
+    _make_one_page_pdf(path, "Scanned page placeholder")
+
+    monkeypatch.setattr("app.services.pdf_processor._needs_ocr", lambda *_args: True)
+    monkeypatch.setattr(
+        "app.services.pdf_processor._ocr_languages",
+        lambda _cfg: ("eng", []),
+    )
+    monkeypatch.setattr(
+        "app.services.pdf_processor._ocr_page",
+        lambda *_args, **_kwargs: ("x" * (MAX_PAGE_TEXT_CHARS + 1), 99.0, []),
+    )
+    monkeypatch.setattr(
+        "app.services.pdf_processor._extract_tables_pymupdf",
+        lambda *_args: pytest.fail("table extraction must not run for oversized OCR text"),
+    )
+
+    with pytest.raises(PDFResourceLimitError, match="слишком много текста"):
+        extract_document(path, path.name, ocr_config={"enabled": True})
+
+
+def test_document_table_cell_budget_skips_excess_tables(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "table-budget.pdf"
+    _make_one_page_pdf(path)
+    tables = [
+        ExtractedTable(
+            page_number=1,
+            title="",
+            headers=["Показатель", "2024"],
+            rows=[["Revenue", "100"]],
+            method="pymupdf",
+            confidence=0.9,
+        ),
+        ExtractedTable(
+            page_number=1,
+            title="",
+            headers=["Показатель", "2024"],
+            rows=[["Expenses", "80"]],
+            method="pymupdf",
+            confidence=0.9,
+        ),
+    ]
+    monkeypatch.setattr(
+        "app.services.pdf_processor.MAX_DOCUMENT_TABLE_CELLS", 5
+    )
+    monkeypatch.setattr(
+        "app.services.pdf_processor._extract_tables_pymupdf",
+        lambda *_args: tables,
+    )
+    monkeypatch.setattr(
+        "app.services.pdf_processor._table_metrics",
+        lambda *_args, **_kwargs: [],
+    )
+
+    result = extract_document(path, path.name, ocr_config={"enabled": False})
+
+    assert len(result.tables) == 1
+    assert any("общий лимит табличных данных" in warning for warning in result.warnings)
+
+
+def test_document_metric_budget_stops_excessive_extraction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "metric-budget.pdf"
+    _make_one_page_pdf(path)
+
+    monkeypatch.setattr("app.services.pdf_processor.MAX_DOCUMENT_METRICS", 0)
+    monkeypatch.setattr(
+        "app.services.pdf_processor._extract_tables_pymupdf",
+        lambda *_args: [],
+    )
+    monkeypatch.setattr(
+        "app.services.pdf_processor._extract_tables_pdfplumber",
+        lambda *_args: [],
+    )
+    monkeypatch.setattr(
+        "app.services.pdf_processor._header_kv_metrics",
+        lambda *_args: [object()],
+    )
+    monkeypatch.setattr(
+        "app.services.pdf_processor._text_metrics",
+        lambda *_args: [],
+    )
+
+    with pytest.raises(PDFResourceLimitError, match="слишком много извлечённых показателей"):
+        extract_document(path, path.name, ocr_config={"enabled": False})
+

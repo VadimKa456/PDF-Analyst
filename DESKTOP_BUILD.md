@@ -29,10 +29,23 @@
 ### Важно про окно
 Приложение работает в **собственном окне** (`pywebview` + Edge WebView2), а не в окне браузера. Fallback в системный браузер используется только если WebView2/pywebview недоступны — поэтому установщик и запрашивает WebView2.
 
-### Лицензия
-Приложение распространяется по **лицензии MIT**. Файл `LICENSE` входит в состав
-установщика и портативной папки; в приложении лицензия показана в разделе
-«О программе» (кнопка «Текст лицензии» открывает `/LICENSE.txt`).
+### Лицензии и сторонние компоненты
+Исходный код проекта PDF Analyst сопровождается лицензией **MIT** (`LICENSE`).
+Эта лицензия не отменяет условий сторонних библиотек, которые включаются в
+установщик. В частности, PyMuPDF/MuPDF распространяется по AGPLv3 либо по
+отдельной коммерческой лицензии Artifex. До коммерческого распространения
+необходимо выбрать и документировать подходящий вариант. Подробности и
+варианты действий: [docs/LICENSING_REVIEW.md](docs/LICENSING_REVIEW.md).
+
+Новая desktop-сборка включает каталог `compliance/` с SBOM Python/npm,
+зафиксированными версиями установленного окружения, перечнем объявленных
+лицензий и доступными текстами third-party notices. Это инвентаризация, а не
+подтверждение юридического соответствия; строки UNKNOWN и отсутствующие тексты
+требуют ручной проверки. Опубликованный `v1.1.0` был собран до появления этого
+механизма и такого каталога не содержит.
+
+Файл проекта `LICENSE` остаётся включён в установщик; в приложении текст
+лицензии проекта доступен в разделе «О программе» через `/LICENSE.txt`.
 
 ### Экспорт файлов (отчёты, графики)
 WebView2 ненадёжно скачивает файлы через `blob + <a download>`. Поэтому:
@@ -50,7 +63,8 @@ WebView2 ненадёжно скачивает файлы через `blob + <a 
 
 1. **Desktop-режим:** `desktop_app.py` запускает локальный сервер FastAPI и открывает UI в отдельном окне через `pywebview` (без браузера). При отсутствии/ошибке WebView выполняется fallback в системный браузер.
 2. **Портативная сборка:** `dist/PDF Analyst/PDF Analyst.exe` (+ файлы рядом) — папка, которую можно запускать/копировать.
-3. **Установщик (один .exe):** `dist/installer/PDF-Analyst-Setup.exe` — создаётся Inno Setup из портативной сборки.
+3. **Защита локального API:** desktop launcher всегда привязывает сервер к `127.0.0.1` (переменная окружения `HOST` игнорируется). На каждый запуск генерируется новый случайный секрет; первая верхнеуровневая навигация окна устанавливает `HttpOnly; SameSite=Strict` cookie. Все `/api` маршруты требуют cookie, а сервер проверяет `Host`, `Origin` и Fetch Metadata. Секрет не передаётся в URL, localStorage или обычный frontend JavaScript.
+4. **Установщик (один .exe):** `dist/installer/PDF-Analyst-Setup.exe` — создаётся Inno Setup из портативной сборки.
 
 ## Данные пользователя
 
@@ -62,8 +76,9 @@ WebView2 ненадёжно скачивает файлы через `blob + <a 
 ## Предварительные требования для сборки
 
 - Windows 10/11 x64
-- Python 3.12 x64 и готовое окружение проекта (`.venv`, зависимости из `requirements.txt`)
-- Собранный frontend: `frontend/dist/index.html` (или Node.js/npm для сборки)
+- Python 3.12 x64 и bootstrap-окружение `.venv` (создаётся через `setup.bat`)
+- Зафиксированный `requirements-desktop-lock.txt` (генерируется и проверяется GitHub Actions для Windows/Python 3.12)
+- Node.js 22 и npm для воспроизводимой сборки frontend из `package-lock.json`
 - [Inno Setup 6](https://jrsoftware.org/isinfo.php) — только если нужен установщик `.exe` (ISCC)
 
 ## Быстрая сборка
@@ -75,19 +90,45 @@ build_desktop.bat
 ```
 
 Скрипт:
-- устанавливает `pyinstaller` и `pywebview` в `.venv`;
-- собирает frontend при необходимости (если найден Node/npm);
-- запускает `pyinstaller --noconfirm --clean pdf_analyst.spec`;
-- компилирует `installer.iss`, если найден Inno Setup 6.
+- проверяет, что bootstrap `.venv` использует CPython 3.12;
+- удаляет прежний `.build-venv` и создаёт новое чистое окружение;
+- устанавливает Python-зависимости только из `requirements-desktop-lock.txt` с проверкой SHA-256 через `pip --require-hashes`;
+- выполняет `pip check` и полный backend `pytest` внутри этого locked-окружения;
+- выполняет `npm ci` и `npm run build`, если Node.js/npm доступны; без npm использует существующий frontend/dist с предупреждением;
+- запускает `pyinstaller --noconfirm --clean pdf_analyst.spec` из locked-окружения;
+- создаёт `compliance/` с точным снимком установленных компонентов и лицензий;
+- компилирует `installer.iss`, если найден Inno Setup 6. Для CI можно задать `PDF_ANALYST_SKIP_INSTALLER=1`, чтобы проверить portable-сборку без Inno Setup.
 
 ## Ручная сборка
 
+Рекомендуемый ручной запуск — тот же проверяемый сценарий, что и в CI:
+
 ```bat
-.venv\Scripts\pip install -r requirements-desktop.txt
-cd frontend && npm install && npm run build && cd ..
-.venv\Scripts\python -m PyInstaller --noconfirm --clean pdf_analyst.spec
+setup.bat
+build_desktop.bat
+```
+
+При необходимости можно выполнить шаги отдельно:
+
+```bat
+.venv\Scripts\python.exe -m venv .build-venv
+.build-venv\Scripts\python.exe -m pip install --require-hashes -r requirements-desktop-lock.txt
+.build-venv\Scripts\python.exe -m pip check
+.build-venv\Scripts\python.exe -m pytest -q
+cd frontend && npm ci && npm run build && cd ..
+.build-venv\Scripts\python.exe -m PyInstaller --noconfirm --clean pdf_analyst.spec
+.build-venv\Scripts\python.exe tools\generate_compliance_inventory.py --output-dir "dist\PDF Analyst\compliance" --frontend-node-modules "frontend\node_modules"
 "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 ```
+
+### Как обновляется Python lock
+
+Входные диапазоны для release-окружения находятся в `requirements-desktop.in`.
+GitHub Actions на Windows/Python 3.12 запускает зафиксированный `pip-tools`,
+генерирует `requirements-desktop-lock.txt` с hashes, затем устанавливает его
+в чистое окружение, выполняет `pip check` и backend tests. Только после успеха
+job сохраняет lock в PR-ветку. Не редактируйте lock вручную: меняйте input-файлы
+и проверяйте новый lock через CI.
 
 ## Режимы PyInstaller
 
@@ -97,12 +138,39 @@ cd frontend && npm install && npm run build && cd ..
 
 `onefile = True` создаёт один исполняемый файл, но увеличивает время запуска и может требовать дополнительной настройки исключений антивируса.
 
+## SBOM и сторонние лицензии
+
+При выполнении `build_desktop.bat` в `dist/PDF Analyst/compliance/` создаются
+CycloneDX JSON-инвентари Python-окружения и frontend lockfile, снимок
+`pip freeze --all`, список объявленных лицензий и доступные тексты notices.
+Каталог включается в установщик рекурсивным правилом Inno Setup. Если
+`frontend/node_modules` отсутствует, npm SBOM всё равно строится из
+`package-lock.json`, но тексты frontend-лицензий могут не скопироваться.
+
+Python build-окружение устанавливается из `requirements-desktop-lock.txt`
+с SHA-256 hashes; inventory дополнительно сохраняет установленный `pip freeze`
+и SBOM. Frontend устанавливается из `package-lock.json` через `npm ci`.
+Эти файлы фиксируют версии, но сами по себе не подтверждают юридическую
+совместимость. Обязательно прочитайте
+[LICENSING_REVIEW.md](docs/LICENSING_REVIEW.md) и
+`compliance/THIRD_PARTY_NOTICES.md` перед коммерческим распространением.
+
 ## Проверка после сборки
 
 1. Запустите `dist\PDF Analyst\PDF Analyst.exe`.
 2. Убедитесь, что окно приложения открылось, UI загрузился, `/api/health` отвечает.
 3. Проверьте загрузку PDF, обработку, анализ, экспорт.
 4. Для OCR установите Tesseract с `rus`/`eng` и проверьте в настройках.
+
+## Ограничения обработки PDF и AI endpoints
+
+- PDF: максимум 500 страниц и 1 ГБ (вдобавок к пользовательскому лимиту загрузки).
+- Ограничения текста: 500 000 символов на страницу и 5 млн на документ.
+- Растр OCR/предпросмотра: не более 12 млн пикселей; OCR не снижается ниже 150 DPI.
+- Tesseract OCR: общий лимит 30 секунд на страницу; по тайм-ауту сохраняется лучший уже распознанный вариант, иначе страница отмечается предупреждением.
+- Общее время обработки одного PDF ограничено 900 секундами; проверка выполняется между страницами и этапами обработки, но не прерывает нативную операцию внутри вызова.
+- Один запрос загрузки может содержать не более 20 PDF-файлов.
+- Удалённые OpenAI-compatible/Ollama endpoints должны использовать HTTPS. HTTP поддерживается только для loopback (например, `http://127.0.0.1:11434`). Перед каждым соединением DNS-ответ проверяется и соединение закрепляется за публичным IP; локальные/служебные адреса блокируются. Переменные proxy окружения и HTTP-редиректы отключены. Для кастомного провайдера используйте доверенный URL.
 
 ## Примечания
 

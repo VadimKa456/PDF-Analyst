@@ -20,6 +20,16 @@ from ..utils import sanitize_filename, sha256_file, short_snippet
 
 router = APIRouter(prefix="/api", tags=["documents"])
 
+MAX_FILES_PER_UPLOAD = 20
+
+
+def _validate_upload_count(file_count: int) -> None:
+    if file_count > MAX_FILES_PER_UPLOAD:
+        raise HTTPException(
+            413,
+            f"За один раз можно загрузить не более {MAX_FILES_PER_UPLOAD} PDF-файлов.",
+        )
+
 
 def doc_payload(d: Document) -> dict[str, Any]:
     return {
@@ -82,6 +92,13 @@ async def upload_documents(
     folder.mkdir(parents=True, exist_ok=True)
     uploaded: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
+
+    try:
+        _validate_upload_count(len(files))
+    except HTTPException:
+        for upload in files:
+            await upload.close()
+        raise
 
     for upload in files:
         original = sanitize_filename(upload.filename or "document.pdf")
@@ -225,8 +242,12 @@ def page_image(document_id: int, page_number: int, db: Session = Depends(get_db)
     doc = _get_doc(db, document_id)
     try:
         png = pdf_processor.render_page_png(doc.file_path, page_number, dpi=120)
-    except Exception as exc:  # noqa: BLE001
+    except pdf_processor.PDFResourceLimitError as exc:
+        raise HTTPException(413, str(exc)) from exc
+    except ValueError as exc:
         raise HTTPException(404, f"Не удалось отрисовать страницу: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(422, "Не удалось отрисовать страницу PDF.") from exc
     return Response(content=png, media_type="image/png")
 
 

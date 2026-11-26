@@ -26,6 +26,8 @@ echo [2/4] Installing Python dependencies...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 goto :fail
+".venv\Scripts\python.exe" -m pip check
+if errorlevel 1 goto :fail
 
 if not exist ".env" (
   if exist ".env.example" (
@@ -41,7 +43,7 @@ call :find_npm
 if defined NPM_CMD (
   echo [4/4] Building frontend...
   pushd frontend
-  call "%NPM_CMD%" install
+  call "%NPM_CMD%" ci
   if errorlevel 1 (
     popd
     echo [WARN] npm install failed. The existing frontend\dist may still work.

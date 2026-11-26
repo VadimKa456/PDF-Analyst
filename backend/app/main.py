@@ -13,6 +13,7 @@ from sqlalchemy import text
 from .api import analysis, compare, dashboard, documents, exports, options, projects, search, settings as settings_api, tables_charts
 from .config import settings
 from .database import SessionLocal, init_db
+from .desktop_security import DesktopSecurityMiddleware
 from .models import Project
 from .services import jobs
 from .services.pdf_processor import tesseract_status
@@ -73,6 +74,9 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["Content-Disposition"],
 )
+
+# Enabled by desktop_app.py only; normal development/server mode remains unchanged.
+app.add_middleware(DesktopSecurityMiddleware)
 
 for router in (
     projects.router,
