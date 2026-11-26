@@ -43,17 +43,15 @@ echo [3/8] Running backend regression tests in the locked environment...
 if errorlevel 1 goto :fail
 
 echo [4/8] Building frontend from package-lock.json...
+set "NODE_DIR="
 set "NPM_CMD="
-where npm >nul 2>nul
-if not errorlevel 1 set "NPM_CMD=npm"
+for /f "delims=" %%i in ('where node 2^>nul') do (
+  if not defined NODE_DIR set "NODE_DIR=%%~dpi"
+)
+if defined NODE_DIR if exist "%NODE_DIR%npm.cmd" set "NPM_CMD=%NODE_DIR%npm.cmd"
 if not defined NPM_CMD (
   for /d %%d in ("%LOCALAPPDATA%\nodejs\node-*") do (
-    if exist "%%d\npm.cmd" set "NPM_CMD=%%d\npm.cmd"
-  )
-)
-if not defined NPM_CMD (
-  for /f "delims=" %%i in ('where node 2^>nul') do (
-    if exist "%%~dpi\npm.cmd" set "NPM_CMD=%%~dpi\npm.cmd"
+    if not defined NPM_CMD if exist "%%d\npm.cmd" set "NPM_CMD=%%d\npm.cmd"
   )
 )
 if defined NPM_CMD (
