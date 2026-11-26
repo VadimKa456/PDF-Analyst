@@ -21,7 +21,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 ROOT = Path(__file__).resolve().parent
-OUT = ROOT / "pdfs"
+OUT = Path(os.environ.get("PDF_ANALYST_SAMPLES_DIR", str(ROOT / "pdfs"))).resolve()
 FONT_DIR = Path(__file__).resolve().parents[1] / "frontend" / "node_modules"  # не используется
 
 import matplotlib
