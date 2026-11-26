@@ -70,7 +70,9 @@ def validate_ai_base_url(value: str, *, setting_name: str = "AI endpoint") -> st
         except UnicodeError:
             raise ValueError(f"{setting_name}: некорректное имя сервера.") from None
         label = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
-        if not re.fullmatch(rf"(?=.{1,253}$){label}(?:\.{label})*", ascii_host):
+        if len(ascii_host) > 253 or not re.fullmatch(
+            rf"{label}(?:\.{label})*", ascii_host
+        ):
             raise ValueError(f"{setting_name}: некорректное имя сервера.")
         if any(host.endswith(suffix) for suffix in _BLOCKED_LOCAL_SUFFIXES):
             raise ValueError(
