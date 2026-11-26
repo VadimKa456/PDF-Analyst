@@ -622,6 +622,7 @@ def _ocr_page(
 
     return best_text, best_conf, best_words
 
+
 def _ocr_headings(text: str) -> list[str]:
     headings = []
     for line in text.split("\n"):
