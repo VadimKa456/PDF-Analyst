@@ -26,6 +26,8 @@ echo [2/4] Installing Python dependencies...
 ".venv\Scripts\python.exe" -m pip install --upgrade pip
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 goto :fail
+".venv\Scripts\python.exe" -m pip check
+if errorlevel 1 goto :fail
 
 if not exist ".env" (
   if exist ".env.example" (
