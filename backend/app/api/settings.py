@@ -12,6 +12,7 @@ from ..database import get_db
 from ..models import Chunk, Document, Metric
 from ..schemas import SettingsUpdate
 from ..services.ai_client import AIClient
+from ..services.ai_url import validate_ai_base_url
 from ..services.pdf_processor import configure_tesseract, tesseract_status
 from ..services.runtime_settings import (
     get_runtime_settings,
@@ -54,6 +55,18 @@ def get_settings(db: Session = Depends(get_db)):
 
 
 def _validate_patch(patch: dict[str, Any]) -> dict[str, Any]:
+    for key, label in (
+        ("openai_base_url", "OpenAI-compatible endpoint"),
+        ("ollama_base_url", "Ollama endpoint"),
+    ):
+        if key in patch and patch[key]:
+            try:
+                patch[key] = validate_ai_base_url(
+                    str(patch[key]), setting_name=label
+                )
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+
     if "ai_provider" in patch and patch["ai_provider"] not in {"none", "openai", "ollama"}:
         raise HTTPException(422, "Провайдер AI должен быть none, openai или ollama")
     if "interface_language" in patch and patch["interface_language"] not in {"ru", "en"}:
