@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 import re
 import shutil
@@ -39,6 +40,22 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 ProgressCallback = Callable[[int, str], None]
+
+# Defensive processing ceilings for untrusted PDF files. The byte limit follows
+# the upload setting; page, text and raster limits protect CPU/memory use.
+MAX_PDF_PAGES = 500
+MAX_PAGE_TEXT_CHARS = 500_000
+MAX_DOCUMENT_TEXT_CHARS = 5_000_000
+MAX_PAGE_PIXELS = 12_000_000
+MAX_TABLES_PER_PAGE = 100
+MAX_TABLE_CELLS = 20_000
+MIN_OCR_DPI = 150
+MIN_PREVIEW_DPI = 36
+
+
+class PDFResourceLimitError(ValueError):
+    """A PDF exceeds a documented processing or rendering resource ceiling."""
+
 
 METRIC_KEYWORDS = (
     "выручк", "доход", "расход", "прибыл", "убыт", "себестоим", "валов", "операцион",
@@ -144,6 +161,7 @@ def _ocr_config(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
         "min_confidence": settings.ocr_min_confidence,
         "auto": settings.ocr_auto,
         "tesseract_cmd": "",
+        "max_file_bytes": int(settings.max_upload_mb) * 1024 * 1024,
     }
     if overrides:
         for key, value in overrides.items():
@@ -452,8 +470,38 @@ def _ocr_score(text: str, confidence: float, reference_len: int = 0) -> float:
     return score
 
 
+def _bounded_page_dpi(
+    page: pymupdf.Page,
+    requested_dpi: int,
+    *,
+    minimum_dpi: int,
+    max_pixels: int = MAX_PAGE_PIXELS,
+) -> int:
+    """Return a safe raster DPI or reject pages that cannot be rendered safely."""
+    rect = page.rect
+    width_pt = abs(float(rect.width))
+    height_pt = abs(float(rect.height))
+    if (
+        not math.isfinite(width_pt)
+        or not math.isfinite(height_pt)
+        or width_pt <= 0
+        or height_pt <= 0
+    ):
+        raise PDFResourceLimitError("Некорректный размер страницы PDF.")
+    requested = max(minimum_dpi, min(int(requested_dpi), 600))
+    max_dpi = math.floor(math.sqrt(max_pixels * 72.0 * 72.0 / (width_pt * height_pt)))
+    effective = min(requested, max_dpi)
+    if effective < minimum_dpi:
+        raise PDFResourceLimitError(
+            "Страница PDF слишком большая для безопасной растеризации "
+            f"(лимит {max_pixels:,} пикселей; минимальное разрешение {minimum_dpi} DPI)."
+        )
+    return effective
+
+
 def _ocr_page(page: pymupdf.Page, lang: str, cfg: dict[str, Any]) -> tuple[str, float, list[dict[str, Any]]]:
-    dpi = max(150, min(int(cfg.get("dpi") or 300), 600))
+    requested_dpi = max(MIN_OCR_DPI, min(int(cfg.get("dpi") or 300), 600))
+    dpi = _bounded_page_dpi(page, requested_dpi, minimum_dpi=MIN_OCR_DPI)
     zoom = dpi / 72.0
     pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
     image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
@@ -1779,13 +1827,30 @@ def extract_document(
             on_progress(max(0, min(100, pct)), stage)
 
     progress(3, "Открытие PDF")
+    try:
+        file_size = path.stat().st_size
+    except OSError as exc:
+        raise ValueError(f"Не удалось прочитать PDF: {exc}") from exc
+    max_file_bytes = max(1, int(ocr_cfg.get("max_file_bytes") or settings.max_upload_mb * 1024 * 1024))
+    if file_size > max_file_bytes:
+        raise PDFResourceLimitError(
+            f"PDF превышает допустимый размер {max_file_bytes // (1024 * 1024)} МБ."
+        )
+
     doc = pymupdf.open(str(path))
     if doc.needs_pass:
         if not doc.authenticate(""):
+            doc.close()
             raise ValueError("PDF защищён паролем. Поддерживаются только документы без пароля.")
     page_total = doc.page_count
     if page_total == 0:
+        doc.close()
         raise ValueError("PDF не содержит страниц.")
+    if page_total > MAX_PDF_PAGES:
+        doc.close()
+        raise PDFResourceLimitError(
+            f"В PDF {page_total} страниц; безопасный предел обработки — {MAX_PDF_PAGES}."
+        )
 
     try:
         first_text = clean_text(doc[0].get_text("text"))[:8000]
@@ -1797,6 +1862,7 @@ def extract_document(
     warnings.extend(ocr_warnings)
 
     plumber_doc = None
+    total_text_chars = 0
     try:
         import pdfplumber
 
@@ -1810,6 +1876,11 @@ def extract_document(
             pct = 5 + int((idx / max(1, page_total)) * 65)
             progress(pct, f"Извлечение страницы {idx + 1} из {page_total}")
             text, headings = _extract_text_page(page)
+            if len(text) > MAX_PAGE_TEXT_CHARS:
+                raise PDFResourceLimitError(
+                    f"Страница {idx + 1} содержит слишком много текста "
+                    f"(>{MAX_PAGE_TEXT_CHARS:,} символов)."
+                )
             method = "text"
             confidence = 0.98
             ocr_words: list[dict[str, Any]] = []
@@ -1842,11 +1913,17 @@ def extract_document(
             if method == "text":
                 page_tables.extend(_extract_tables_pymupdf(page, text))
                 if not page_tables and plumber_doc is not None:
-                    try:
-                        plumber_page = plumber_doc.pages[idx]
-                        page_tables.extend(_extract_tables_pdfplumber(plumber_page, text))
-                    except Exception as exc:  # noqa: BLE001
-                        logger.debug("pdfplumber page failed: %s", exc)
+                    if len(text) > 200_000:
+                        warnings.append(
+                            f"Стр. {idx + 1}: альтернативное извлечение таблиц пропущено "
+                            "из-за большого объёма текста."
+                        )
+                    else:
+                        try:
+                            plumber_page = plumber_doc.pages[idx]
+                            page_tables.extend(_extract_tables_pdfplumber(plumber_page, text))
+                        except Exception as exc:  # noqa: BLE001
+                            logger.debug("pdfplumber page failed: %s", exc)
             elif method == "ocr" and ocr_words:
                 try:
                     page_tables.extend(
@@ -1854,9 +1931,24 @@ def extract_document(
                     )
                 except Exception as exc:  # noqa: BLE001
                     logger.debug("OCR table rebuild failed: %s", exc)
+            # Ограничиваем объём структур, которые сохраняются и индексируются.
+            if len(page_tables) > MAX_TABLES_PER_PAGE:
+                warnings.append(
+                    f"Стр. {idx + 1}: найдено таблиц больше лимита "
+                    f"{MAX_TABLES_PER_PAGE}; лишние таблицы пропущены."
+                )
+                page_tables = page_tables[:MAX_TABLES_PER_PAGE]
+
             # дедупликация таблиц
             seen: set[str] = set()
             for t in page_tables:
+                cell_count = len(t.headers) + sum(len(row) for row in t.rows)
+                if cell_count > MAX_TABLE_CELLS:
+                    warnings.append(
+                        f"Стр. {idx + 1}: таблица пропущена — "
+                        f"число ячеек превышает лимит {MAX_TABLE_CELLS:,}."
+                    )
+                    continue
                 sig = _table_signature(t.headers, t.rows)
                 if sig in seen:
                     continue
@@ -1865,6 +1957,12 @@ def extract_document(
                 metrics.extend(_table_metrics(t, default_period, page_text=text))
             metrics.extend(_header_kv_metrics(text, idx + 1, default_period, confidence))
             metrics.extend(_text_metrics(text, idx + 1, default_period, confidence))
+            total_text_chars += len(text)
+            if total_text_chars > MAX_DOCUMENT_TEXT_CHARS:
+                raise PDFResourceLimitError(
+                    "Документ содержит слишком много извлечённого текста "
+                    f"(>{MAX_DOCUMENT_TEXT_CHARS:,} символов)."
+                )
             pages.append(
                 PageData(
                     number=idx + 1,
@@ -1936,7 +2034,10 @@ def render_page_png(path: str | Path, page_number: int, dpi: int = 110) -> bytes
         if page_number < 1 or page_number > doc.page_count:
             raise ValueError("Страница не найдена")
         page = doc[page_number - 1]
-        zoom = dpi / 72.0
+        effective_dpi = _bounded_page_dpi(
+            page, dpi, minimum_dpi=MIN_PREVIEW_DPI
+        )
+        zoom = effective_dpi / 72.0
         pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
         return pix.tobytes("png")
     finally:
