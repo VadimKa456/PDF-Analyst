@@ -55,10 +55,9 @@ def get_settings(db: Session = Depends(get_db)):
 
 
 def _validate_patch(patch: dict[str, Any]) -> dict[str, Any]:
-    selected_provider = str(patch.get("ai_provider") or "").lower()
-    for key, provider, label in (
-        ("openai_base_url", "openai", "OpenAI-compatible endpoint"),
-        ("ollama_base_url", "ollama", "Ollama endpoint"),
+    for key, label in (
+        ("openai_base_url", "OpenAI-compatible endpoint"),
+        ("ollama_base_url", "Ollama endpoint"),
     ):
         # Validate every supplied endpoint, including the currently inactive
         # provider, so unsafe URLs cannot be stored and activated later.
