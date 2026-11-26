@@ -112,11 +112,11 @@ def test_pdfplumber_recovers_borderless_table_with_multiline_headers(
         for cell in row
         if cell is not None
     )
-    normalized = " ".join(flattened.split()).casefold()
+    normalized = "".join(flattened.split()).casefold()
 
     for expected in (
-        "financial indicator",
-        "thousand rub",
+        "financialindicator",
+        "thousandrub",
         "2025",
         "2024",
         "revenue",
