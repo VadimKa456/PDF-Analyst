@@ -140,15 +140,18 @@ def test_settings_reject_remote_ai_endpoints_over_plain_http() -> None:
     assert "HTTPS" in str(error.value.detail)
 
 
-def test_settings_reject_unsafe_inactive_ai_endpoint() -> None:
-    # The UI sends settings for both providers. An inactive endpoint must not
-    # be allowed to retain an unsafe URL for later activation.
+def test_settings_preserve_inactive_legacy_ai_endpoint_but_block_activation() -> None:
+    # An inactive legacy LAN URL may remain saved while OpenAI is selected,
+    # but it must be rejected when Ollama becomes the active provider.
+    legacy_url = "http://192.168.1.20:11434"
+    patch = _validate_patch(
+        {"ai_provider": "openai", "ollama_base_url": legacy_url}
+    )
+    assert patch["ollama_base_url"] == legacy_url
+
     with pytest.raises(HTTPException) as error:
         _validate_patch(
-            {
-                "ai_provider": "openai",
-                "ollama_base_url": "http://192.168.1.20:11434",
-            }
+            {"ai_provider": "ollama", "ollama_base_url": legacy_url}
         )
     assert error.value.status_code == 422
     assert "частные" in str(error.value.detail)
