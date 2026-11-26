@@ -57,7 +57,7 @@ echo [3/5] Running PyInstaller...
 "%PY%" -m PyInstaller --noconfirm --clean pdf_analyst.spec
 if errorlevel 1 goto :fail
 
-echo [4/5] Copying runtime notes...
+echo [4/6] Copying runtime notes...
 if not exist "dist\PDF Analyst" (
   echo [ERROR] Build output not found: dist\PDF Analyst
   exit /b 1
@@ -66,7 +66,19 @@ if exist ".env.example" copy /Y ".env.example" "dist\PDF Analyst\.env.example" >
 if exist "LICENSE" copy /Y "LICENSE" "dist\PDF Analyst\LICENSE" >nul
 if exist "DESKTOP_BUILD.md" copy /Y "DESKTOP_BUILD.md" "dist\PDF Analyst\DESKTOP_BUILD.md" >nul
 
-echo [5/5] Building installer (Inno Setup)...
+echo [5/6] Generating dependency inventory and third-party notices...
+"%PY%" "tools\generate_compliance_inventory.py" --output-dir "dist\PDF Analyst\compliance" --frontend-node-modules "frontend\node_modules"
+if errorlevel 1 goto :fail
+if not exist "dist\PDF Analyst\compliance\sbom-python.cdx.json" (
+  echo [ERROR] Python SBOM was not generated.
+  goto :fail
+)
+if not exist "dist\PDF Analyst\compliance\sbom-frontend.cdx.json" (
+  echo [ERROR] Frontend SBOM was not generated.
+  goto :fail
+)
+
+echo [6/6] Building installer (Inno Setup)...
 set "ISCC="
 if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
 if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe" set "ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
