@@ -140,6 +140,20 @@ def test_settings_reject_remote_ai_endpoints_over_plain_http() -> None:
     assert "HTTPS" in str(error.value.detail)
 
 
+def test_settings_reject_unsafe_inactive_ai_endpoint() -> None:
+    # The UI sends settings for both providers. An inactive endpoint must not
+    # be allowed to retain an unsafe URL for later activation.
+    with pytest.raises(HTTPException) as error:
+        _validate_patch(
+            {
+                "ai_provider": "openai",
+                "ollama_base_url": "http://192.168.1.20:11434",
+            }
+        )
+    assert error.value.status_code == 422
+    assert "частные" in str(error.value.detail)
+
+
 def test_local_mode_never_calls_ai() -> None:
     client = AIClient({"ai_provider": "none"})
     with pytest.raises(AIError):
