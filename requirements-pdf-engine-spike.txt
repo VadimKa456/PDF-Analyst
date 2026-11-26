@@ -1,0 +1,2 @@
+# Experimental PDFium engine spike only; not used by the production application.
+pypdfium2==5.15.2
