@@ -14,6 +14,7 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 
 from .ai_url import validate_ai_base_url
+from .ai_transport import SafeAITransport
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,16 @@ class AIClient:
             "ollama_base_url",
             "http://localhost:11434",
             "Ollama endpoint",
+        )
+
+    @staticmethod
+    def _http_client(timeout: float) -> httpx.Client:
+        """Create a direct client with DNS-pinned outbound connections."""
+        return httpx.Client(
+            timeout=timeout,
+            follow_redirects=False,
+            trust_env=False,
+            transport=SafeAITransport(),
         )
 
     @property
@@ -139,7 +150,7 @@ class AIClient:
         """POST к OpenAI-совместимому API с повтором на временных ошибках."""
         for attempt in range(retries + 1):
             try:
-                with httpx.Client(timeout=self.timeout, follow_redirects=False) as client:
+                with self._http_client(self.timeout) as client:
                     response = client.post(
                         self._openai_url(path), headers=self._headers(), json=payload
                     )
@@ -200,7 +211,7 @@ class AIClient:
         if json_mode:
             payload["format"] = "json"
         try:
-            with httpx.Client(timeout=self.timeout, follow_redirects=False) as client:
+            with self._http_client(self.timeout) as client:
                 r = client.post(base + "/api/chat", json=payload)
         except httpx.HTTPError as exc:
             raise AIError(f"Не удалось подключиться к Ollama: {exc}") from exc
@@ -217,14 +228,14 @@ class AIClient:
         if self.provider == "ollama":
             base = self._ollama_base_url()
             try:
-                with httpx.Client(timeout=min(self.timeout, 20), follow_redirects=False) as client:
+                with self._http_client(min(self.timeout, 20)) as client:
                     r = client.get(base + "/api/tags")
                 r.raise_for_status()
                 return [m.get("name", "") for m in r.json().get("models", []) if m.get("name")]
             except Exception as exc:  # noqa: BLE001
                 raise AIError(f"Не удалось получить список моделей Ollama: {exc}") from exc
         try:
-            with httpx.Client(timeout=min(self.timeout, 25), follow_redirects=False) as client:
+            with self._http_client(min(self.timeout, 25)) as client:
                 r = client.get(self._openai_url("/models"), headers=self._headers())
             r.raise_for_status()
             return [m.get("id", "") for m in r.json().get("data", []) if m.get("id")]
@@ -254,7 +265,7 @@ class AIClient:
         base = self._ollama_base_url()
         model = self.embedding_model
         try:
-            with httpx.Client(timeout=self.timeout, follow_redirects=False) as client:
+            with self._http_client(self.timeout) as client:
                 r = client.post(base + "/api/embed", json={"model": model, "input": texts})
                 if r.status_code == 404:
                     r = client.post(
