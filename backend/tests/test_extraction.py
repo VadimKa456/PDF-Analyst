@@ -3,13 +3,17 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from types import SimpleNamespace
 
+import pymupdf
 import pytest
 
 from app.services.analytics import metric_concept
 from app.services.pdf_processor import (
     DocumentExtraction,
     ExtractedTable,
+    PDFResourceLimitError,
+    _bounded_page_dpi,
     _clean_metric_label,
     _table_metrics,
     extract_document,
@@ -110,6 +114,57 @@ def test_render_page_png_returns_valid_png(alpha_2024_pdf: Path) -> None:
 
     with pytest.raises(ValueError):
         render_page_png(alpha_2024_pdf, 99)
+
+
+def test_pdf_processing_rejects_more_than_page_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "many-pages.pdf"
+    doc = pymupdf.open()
+    doc.new_page()
+    doc.new_page()
+    doc.save(path)
+    doc.close()
+
+    monkeypatch.setattr("app.services.pdf_processor.MAX_PDF_PAGES", 1)
+    with pytest.raises(PDFResourceLimitError, match="предел обработки"):
+        extract_document(path, path.name, ocr_config={"enabled": False})
+
+
+def test_pdf_processing_rejects_file_over_configured_byte_limit(tmp_path: Path) -> None:
+    path = tmp_path / "too-large.pdf"
+    path.write_bytes(b"%PDF-1.7\n" + b"x" * 100)
+    with pytest.raises(PDFResourceLimitError, match="допустимый размер"):
+        extract_document(
+            path,
+            path.name,
+            ocr_config={"enabled": False, "max_file_bytes": 50},
+        )
+
+
+def test_ocr_raster_dpi_is_reduced_to_pixel_budget() -> None:
+    page = SimpleNamespace(
+        rect=SimpleNamespace(width=1000.0, height=1000.0)
+    )
+    dpi = _bounded_page_dpi(page, 300, minimum_dpi=150)
+    assert 150 <= dpi < 300
+    assert (1000 * dpi / 72) * (1000 * dpi / 72) <= 12_000_000
+
+
+def test_ocr_skips_pages_that_cannot_fit_safe_pixel_budget() -> None:
+    page = SimpleNamespace(
+        rect=SimpleNamespace(width=14_400.0, height=14_400.0)
+    )
+    with pytest.raises(PDFResourceLimitError, match="слишком большая"):
+        _bounded_page_dpi(page, 300, minimum_dpi=150)
+
+
+def test_preview_dpi_is_reduced_for_large_pages() -> None:
+    page = SimpleNamespace(
+        rect=SimpleNamespace(width=10_000.0, height=10_000.0)
+    )
+    dpi = _bounded_page_dpi(page, 120, minimum_dpi=36)
+    assert 36 <= dpi < 120
 
 
 def _statement_table(rows: list[list[str]]) -> ExtractedTable:
