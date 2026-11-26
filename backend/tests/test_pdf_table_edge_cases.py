@@ -117,7 +117,7 @@ def test_pdfplumber_recovers_borderless_table_with_multiline_headers(
     # pdfplumber text-strategy boundaries can split a word after its first
     # character (for example, "ye ar ended"). Rejoin only that artifact
     # before asserting the recovered header text.
-    normalized = re.sub(r"\\b([a-z])\\s+([a-z]{2,})\\b", r"\\1\\2", normalized)
+    normalized = re.sub(r"\b([a-z])\s+([a-z]{2,})\b", r"\1\2", normalized)
 
     for expected in (
         "financial indicator",
