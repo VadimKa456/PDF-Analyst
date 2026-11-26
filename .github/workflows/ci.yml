@@ -122,10 +122,10 @@ jobs:
           HOST: "0.0.0.0"
           PORT: "18765"
         run: |
-          $exe = (Resolve-Path "dist\\PDF Analyst\\PDF Analyst.exe").Path
+          $exe = (Resolve-Path "dist/PDF Analyst/PDF Analyst.exe").Path
           $process = Start-Process -FilePath $exe -ArgumentList "--headless-smoke" -Wait -PassThru
           if ($process.ExitCode -ne 0) {
-            $log = Join-Path $env:LOCALAPPDATA "PDF Analyst\\logs\\desktop.log"
+            $log = Join-Path $env:LOCALAPPDATA "PDF Analyst/logs/desktop.log"
             if (Test-Path $log) { Get-Content $log -Tail 120 }
             throw "Packaged desktop smoke failed with exit code $($process.ExitCode)"
           }
