@@ -283,14 +283,15 @@ def build_scanned_pdf(path: Path) -> None:
     from reportlab.lib.utils import ImageReader
     from reportlab.pdfgen import canvas
 
-    source = OUT / "_ocr_source.pdf"
-    build_pdf(
-        source,
-        "СПРАВКА О ФИНАНСОВЫХ ПОКАЗАТЕЛЯХ",
-        "alpha",
-        2024,
-        dividend_change=True,
-    )
+    # Reuse the already-generated alpha_2024 fixture so the scanned image
+    # contains exactly the same deterministic ground-truth values as its
+    # text-based counterpart. Rebuilding here would consume a different RNG
+    # state and silently create a different financial statement.
+    source = OUT / "alpha_2024.pdf"
+    if not source.exists():
+        raise FileNotFoundError(
+            "alpha_2024.pdf must be generated before the scanned OCR fixture"
+        )
     src = pymupdf.open(str(source))
     pix = src[0].get_pixmap(matrix=pymupdf.Matrix(2.2, 2.2), alpha=False)
     png = pix.tobytes("png")
