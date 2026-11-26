@@ -28,6 +28,19 @@ datas = []
 binaries = []
 hiddenimports = []
 
+
+def _is_runtime_module(module_name: str) -> bool:
+    """Exclude test suites and developer-only modules from the desktop bundle."""
+    parts = module_name.lower().split(".")
+    if any(part in {"test", "tests", "testing"} for part in parts):
+        return False
+    if any(part.startswith("test_") for part in parts):
+        return False
+    if module_name == "backend._final_e2e":
+        return False
+    return True
+
+
 # Frontend (собранный UI)
 frontend_dist = project_dir / "frontend" / "dist"
 if frontend_dist.exists():
@@ -50,7 +63,6 @@ for pkg in (
     "pydantic_settings",
     "sqlalchemy",
     "pymupdf",
-    "fitz",
     "pdfplumber",
     "PIL",
     "cv2",
@@ -67,7 +79,7 @@ for pkg in (
     "python_multipart",
 ):
     try:
-        hiddenimports += collect_submodules(pkg)
+        hiddenimports += collect_submodules(pkg, filter=_is_runtime_module)
     except Exception:
         pass
     try:
@@ -94,11 +106,10 @@ hiddenimports += [
     "uvicorn.lifespan",
     "uvicorn.lifespan.on",
     "sqlalchemy.dialects.sqlite",
-    "engineio.async_drivers.threading",
 ]
 
 # Backend package
-hiddenimports += collect_submodules("backend")
+hiddenimports += collect_submodules("backend", filter=_is_runtime_module)
 
 
 a = Analysis(
