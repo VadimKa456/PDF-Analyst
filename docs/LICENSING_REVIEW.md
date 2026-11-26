@@ -268,6 +268,25 @@ Before adopting this route, create a separate migration branch and compare both 
 
 Until one of those paths is completed, treat the current technically validated portable build as an engineering/test artifact, not an approved proprietary commercial release. The MIT license on the project source does not by itself relicense PyMuPDF or the other third-party components.
 
+## Inno Setup commercial-use request
+
+The current installer script targets Inno Setup 6.x. The current stable Inno Setup 6 release checked on 26 Nov 2026 is 6.7.4 (released 28 Oct 2026).
+
+The Inno Setup authors ask commercial users to purchase a license. Their FAQ defines a commercial user as a for-profit organization, or an individual/freelancer using Inno Setup for for-profit work, with annual revenue above USD 5,000. The authors state that purchasing is **not strictly required**, but they request it from commercial users. The license is perpetual, with a two-year update term; the already-licensed version can continue to be used after the update term expires.
+
+The authors also count unattended compiler invocation from a build script as use: each CI machine that may invoke the compiler concurrently counts as one user, with at least a single-user license expected. Running the built installer does not itself count as using Inno Setup. They state that a license need not be purchased before an installer is ready for production.
+
+Official references:
+- https://jrsoftware.org/inno-setup/purchase
+- https://jrsoftware.org/files/is6-whatsnew.htm
+- https://jrsoftware.org/inno-setup/downloads
+
+Current project handling:
+- The portable PyInstaller build and packaged EXE smoke test run in CI, but CI explicitly sets `PDF_ANALYST_SKIP_INSTALLER=1` and does not invoke Inno Setup.
+- Compile the final installer locally with the intended stable Inno Setup 6 release when the package is ready for production.
+- Before paid production use, check whether the project/user meets the vendor's stated commercial-user threshold and decide whether to purchase a single-user license. Do not treat the vendor's request as a mandatory redistribution license requirement, but retain the policy in the release compliance record.
+- A future CI job that compiles the installer must account for the vendor's CI-machine user-count rule and must not be enabled casually.
+
 ## Release checklist
 
 - [ ] Build from a clean Python 3.12 virtual environment and run
