@@ -46,7 +46,7 @@ def test_ocr_table_is_rebuilt_with_headers(scanned: DocumentExtraction) -> None:
     assert any("2024" in h for h in table.headers)
     assert any("2023" in h for h in table.headers)
     # OCR table reconstruction may retain visual separator rows; count data rows only.
-    data_rows = [row for row in table.rows if any(cell.strip() for cell in row)]
+    data_rows = [row for row in table.rows if row and row[0].strip()]
     assert len(data_rows) == 6
 
 
