@@ -1890,7 +1890,7 @@ def extract_document(
     deadline = time.monotonic() + MAX_DOCUMENT_PROCESS_SECONDS
 
     def check_deadline(page_number: int | None = None) -> None:
-        if time.monotonic() > deadline:
+        if time.monotonic() >= deadline:
             page_label = f" на странице {page_number}" if page_number is not None else ""
             raise PDFResourceLimitError(
                 "Превышен общий лимит времени обработки PDF "
