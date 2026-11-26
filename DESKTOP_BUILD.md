@@ -90,6 +90,8 @@ build_desktop.bat
 
 Скрипт:
 - устанавливает `pyinstaller` и `pywebview` в `.venv`;
+- выполняет `pip check` и полный backend `pytest` перед упаковкой;
+- останавливает сборку при ошибке `npm ci` или `npm run build`;
 - собирает frontend при необходимости (если найден Node/npm);
 - запускает `pyinstaller --noconfirm --clean pdf_analyst.spec`;
 - компилирует `installer.iss`, если найден Inno Setup 6.
