@@ -1946,6 +1946,7 @@ def extract_document(
     plumber_doc = None
     total_text_chars = 0
     total_table_cells = 0
+    table_budget_warned = False
     try:
         import pdfplumber
 
@@ -2053,11 +2054,13 @@ def extract_document(
                     len(tables) >= MAX_DOCUMENT_TABLES
                     or total_table_cells + cell_count > MAX_DOCUMENT_TABLE_CELLS
                 ):
-                    warnings.append(
-                        "Достигнут общий лимит табличных данных документа "
-                        f"({MAX_DOCUMENT_TABLES:,} таблиц / "
-                        f"{MAX_DOCUMENT_TABLE_CELLS:,} ячеек); оставшиеся таблицы пропущены."
-                    )
+                    if not table_budget_warned:
+                        warnings.append(
+                            "Достигнут общий лимит табличных данных документа "
+                            f"({MAX_DOCUMENT_TABLES:,} таблиц / "
+                            f"{MAX_DOCUMENT_TABLE_CELLS:,} ячеек); оставшиеся таблицы пропущены."
+                        )
+                        table_budget_warned = True
                     continue
                 tables.append(t)
                 total_table_cells += cell_count
