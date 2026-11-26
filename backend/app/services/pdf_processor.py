@@ -54,6 +54,7 @@ MAX_TABLE_CELLS = 20_000
 MIN_OCR_DPI = 150
 MIN_PREVIEW_DPI = 36
 MAX_OCR_PAGE_SECONDS = 30.0
+MAX_DOCUMENT_PROCESS_SECONDS = 900.0
 
 
 class PDFResourceLimitError(ValueError):
@@ -1883,6 +1884,16 @@ def extract_document(
     import time
 
     started = time.perf_counter()
+    deadline = time.monotonic() + MAX_DOCUMENT_PROCESS_SECONDS
+
+    def check_deadline(page_number: int | None = None) -> None:
+        if time.monotonic() > deadline:
+            page_label = f" на странице {page_number}" if page_number is not None else ""
+            raise PDFResourceLimitError(
+                "Превышен общий лимит времени обработки PDF "
+                f"({MAX_DOCUMENT_PROCESS_SECONDS:.0f} секунд){page_label}."
+            )
+
     ocr_cfg = _ocr_config(ocr_config)
     path = Path(path)
     warnings: list[str] = []
@@ -1939,11 +1950,14 @@ def extract_document(
         warnings.append(f"pdfplumber недоступен для этого файла: {exc}")
 
     try:
+        check_deadline()
         for idx in range(page_total):
+            check_deadline(idx + 1)
             page = doc[idx]
             pct = 5 + int((idx / max(1, page_total)) * 65)
             progress(pct, f"Извлечение страницы {idx + 1} из {page_total}")
             text, headings = _extract_text_page(page)
+            check_deadline(idx + 1)
             if len(text) > MAX_PAGE_TEXT_CHARS:
                 raise PDFResourceLimitError(
                     f"Страница {idx + 1} содержит слишком много текста "
@@ -2027,6 +2041,7 @@ def extract_document(
                 metrics.extend(_table_metrics(t, default_period, page_text=text))
             metrics.extend(_header_kv_metrics(text, idx + 1, default_period, confidence))
             metrics.extend(_text_metrics(text, idx + 1, default_period, confidence))
+            check_deadline(idx + 1)
             total_text_chars += len(text)
             if total_text_chars > MAX_DOCUMENT_TEXT_CHARS:
                 raise PDFResourceLimitError(
@@ -2046,10 +2061,13 @@ def extract_document(
                 )
             )
 
+        check_deadline()
         progress(78, "Удаление дублей и проверка качества")
         # дедупликация показателей (текст и таблицы часто дублируют друг друга)
         unique: dict[tuple, ExtractedMetric] = {}
-        for m in metrics:
+        for metric_index, m in enumerate(metrics):
+            if metric_index % 1000 == 0:
+                check_deadline()
             key = (
                 m.normalized_label,
                 m.period,
@@ -2076,6 +2094,7 @@ def extract_document(
             )
         if not tables:
             warnings.append("Таблицы не обнаружены — показатели извлечены из текста.")
+        check_deadline()
         progress(92, "Сохранение результатов")
         ms = int((time.perf_counter() - started) * 1000)
         return DocumentExtraction(
