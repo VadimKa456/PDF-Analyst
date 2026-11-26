@@ -156,6 +156,18 @@ def _runtime_with_overrides(db: Session, body: dict[str, Any] | None) -> dict[st
             runtime[key] = overrides[key]
     if overrides.get("openai_api_key") == "__clear__":
         runtime["openai_api_key"] = ""
+
+    for key, label in (
+        ("openai_base_url", "OpenAI-compatible endpoint"),
+        ("ollama_base_url", "Ollama endpoint"),
+    ):
+        try:
+            runtime[key] = validate_ai_base_url(
+                str(runtime.get(key) or ""),
+                setting_name=label,
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
     return runtime
 
 
