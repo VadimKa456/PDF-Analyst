@@ -157,17 +157,18 @@ def _runtime_with_overrides(db: Session, body: dict[str, Any] | None) -> dict[st
     if overrides.get("openai_api_key") == "__clear__":
         runtime["openai_api_key"] = ""
 
-    for key, label in (
-        ("openai_base_url", "OpenAI-compatible endpoint"),
-        ("ollama_base_url", "Ollama endpoint"),
-    ):
+    selected_endpoint = {
+        "openai": ("openai_base_url", "OpenAI-compatible endpoint"),
+        "ollama": ("ollama_base_url", "Ollama endpoint"),
+    }.get(str(runtime.get("ai_provider") or "none").lower())
+    if selected_endpoint:
+        key, label = selected_endpoint
         configured_url = str(runtime.get(key) or "").strip()
-        if not configured_url:
-            continue
-        try:
-            runtime[key] = validate_ai_base_url(configured_url, setting_name=label)
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from exc
+        if configured_url:
+            try:
+                runtime[key] = validate_ai_base_url(configured_url, setting_name=label)
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
     return runtime
 
 
