@@ -76,8 +76,9 @@ WebView2 ненадёжно скачивает файлы через `blob + <a 
 ## Предварительные требования для сборки
 
 - Windows 10/11 x64
-- Python 3.12 x64 и готовое окружение проекта (`.venv`, зависимости из `requirements.txt`)
-- Собранный frontend: `frontend/dist/index.html` (или Node.js/npm для сборки)
+- Python 3.12 x64 и bootstrap-окружение `.venv` (создаётся через `setup.bat`)
+- Зафиксированный `requirements-desktop-lock.txt` (генерируется и проверяется GitHub Actions для Windows/Python 3.12)
+- Node.js 22 и npm для воспроизводимой сборки frontend из `package-lock.json`
 - [Inno Setup 6](https://jrsoftware.org/isinfo.php) — только если нужен установщик `.exe` (ISCC)
 
 ## Быстрая сборка
@@ -89,21 +90,45 @@ build_desktop.bat
 ```
 
 Скрипт:
-- устанавливает `pyinstaller` и `pywebview` в `.venv`;
-- выполняет `pip check` и полный backend `pytest` перед упаковкой;
-- останавливает сборку при ошибке `npm ci` или `npm run build`;
-- собирает frontend при необходимости (если найден Node/npm);
-- запускает `pyinstaller --noconfirm --clean pdf_analyst.spec`;
-- компилирует `installer.iss`, если найден Inno Setup 6.
+- проверяет, что bootstrap `.venv` использует CPython 3.12;
+- удаляет прежний `.build-venv` и создаёт новое чистое окружение;
+- устанавливает Python-зависимости только из `requirements-desktop-lock.txt` с проверкой SHA-256 через `pip --require-hashes`;
+- выполняет `pip check` и полный backend `pytest` внутри этого locked-окружения;
+- выполняет `npm ci` и `npm run build`, если Node.js/npm доступны; без npm использует существующий frontend/dist с предупреждением;
+- запускает `pyinstaller --noconfirm --clean pdf_analyst.spec` из locked-окружения;
+- создаёт `compliance/` с точным снимком установленных компонентов и лицензий;
+- компилирует `installer.iss`, если найден Inno Setup 6. Для CI можно задать `PDF_ANALYST_SKIP_INSTALLER=1`, чтобы проверить portable-сборку без Inno Setup.
 
 ## Ручная сборка
 
+Рекомендуемый ручной запуск — тот же проверяемый сценарий, что и в CI:
+
 ```bat
-.venv\Scripts\pip install -r requirements-desktop.txt
+setup.bat
+build_desktop.bat
+```
+
+При необходимости можно выполнить шаги отдельно:
+
+```bat
+.venv\Scripts\python.exe -m venv .build-venv
+.build-venv\Scripts\python.exe -m pip install --require-hashes -r requirements-desktop-lock.txt
+.build-venv\Scripts\python.exe -m pip check
+.build-venv\Scripts\python.exe -m pytest -q
 cd frontend && npm ci && npm run build && cd ..
-.venv\Scripts\python -m PyInstaller --noconfirm --clean pdf_analyst.spec
+.build-venv\Scripts\python.exe -m PyInstaller --noconfirm --clean pdf_analyst.spec
+.build-venv\Scripts\python.exe tools\generate_compliance_inventory.py --output-dir "dist\PDF Analyst\compliance" --frontend-node-modules "frontend\node_modules"
 "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 ```
+
+### Как обновляется Python lock
+
+Входные диапазоны для release-окружения находятся в `requirements-desktop.in`.
+GitHub Actions на Windows/Python 3.12 запускает зафиксированный `pip-tools`,
+генерирует `requirements-desktop-lock.txt` с hashes, затем устанавливает его
+в чистое окружение, выполняет `pip check` и backend tests. Только после успеха
+job сохраняет lock в PR-ветку. Не редактируйте lock вручную: меняйте input-файлы
+и проверяйте новый lock через CI.
 
 ## Режимы PyInstaller
 
@@ -122,9 +147,12 @@ CycloneDX JSON-инвентари Python-окружения и frontend lockfile
 `frontend/node_modules` отсутствует, npm SBOM всё равно строится из
 `package-lock.json`, но тексты frontend-лицензий могут не скопироваться.
 
-Это фиксирует фактические версии на момент сборки, но не заменяет lock-файл
-Python-зависимостей и не подтверждает юридическую совместимость. Обязательно
-прочитайте [LICENSING_REVIEW.md](docs/LICENSING_REVIEW.md) и
+Python build-окружение устанавливается из `requirements-desktop-lock.txt`
+с SHA-256 hashes; inventory дополнительно сохраняет установленный `pip freeze`
+и SBOM. Frontend устанавливается из `package-lock.json` через `npm ci`.
+Эти файлы фиксируют версии, но сами по себе не подтверждают юридическую
+совместимость. Обязательно прочитайте
+[LICENSING_REVIEW.md](docs/LICENSING_REVIEW.md) и
 `compliance/THIRD_PARTY_NOTICES.md` перед коммерческим распространением.
 
 ## Проверка после сборки
