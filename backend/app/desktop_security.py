@@ -17,6 +17,13 @@ SESSION_COOKIE_NAME = "pdf_analyst_session"
 STARTUP_TOKEN_HEADER = "X-PDF-Analyst-Startup-Token"
 
 
+def _token_matches(candidate: str, expected: str) -> bool:
+    """Constant-time comparison that safely rejects malformed cookie/header text."""
+    if not candidate or not expected:
+        return False
+    return secrets.compare_digest(candidate.encode("utf-8"), expected.encode("utf-8"))
+
+
 class DesktopSecurityMiddleware(BaseHTTPMiddleware):
     """Protect desktop-mode requests while leaving server/dev mode unchanged."""
 
@@ -56,17 +63,14 @@ class DesktopSecurityMiddleware(BaseHTTPMiddleware):
         is_api = path == "/api" or path.startswith("/api/")
         if is_api:
             supplied_cookie = request.cookies.get(SESSION_COOKIE_NAME, "")
-            authenticated = bool(session_token) and secrets.compare_digest(
-                supplied_cookie, session_token
-            )
+            authenticated = _token_matches(supplied_cookie, session_token)
 
             # The launcher may perform one internal readiness check before
             # opening the UI. This header is accepted only for GET /api/health.
             startup_check = (
                 path == "/api/health"
                 and request.method == "GET"
-                and bool(session_token)
-                and secrets.compare_digest(
+                and _token_matches(
                     request.headers.get(STARTUP_TOKEN_HEADER, ""),
                     session_token,
                 )
