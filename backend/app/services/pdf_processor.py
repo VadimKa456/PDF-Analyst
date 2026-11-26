@@ -44,6 +44,7 @@ ProgressCallback = Callable[[int, str], None]
 # Defensive processing ceilings for untrusted PDF files. The byte limit follows
 # the upload setting; page, text and raster limits protect CPU/memory use.
 MAX_PDF_PAGES = 500
+MAX_PDF_FILE_BYTES = 1000 * 1024 * 1024
 MAX_PAGE_TEXT_CHARS = 500_000
 MAX_DOCUMENT_TEXT_CHARS = 5_000_000
 MAX_PAGE_PIXELS = 12_000_000
@@ -161,7 +162,7 @@ def _ocr_config(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
         "min_confidence": settings.ocr_min_confidence,
         "auto": settings.ocr_auto,
         "tesseract_cmd": "",
-        "max_file_bytes": int(settings.max_upload_mb) * 1024 * 1024,
+        "max_file_bytes": MAX_PDF_FILE_BYTES,
     }
     if overrides:
         for key, value in overrides.items():
