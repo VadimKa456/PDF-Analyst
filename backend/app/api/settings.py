@@ -60,13 +60,9 @@ def _validate_patch(patch: dict[str, Any]) -> dict[str, Any]:
         ("openai_base_url", "openai", "OpenAI-compatible endpoint"),
         ("ollama_base_url", "ollama", "Ollama endpoint"),
     ):
-        # The settings form sends both provider URLs. Validate the active
-        # provider, or the URL itself when a client updates it independently.
-        if (
-            key in patch
-            and patch[key]
-            and (not selected_provider or selected_provider == provider)
-        ):
+        # Validate every supplied endpoint, including the currently inactive
+        # provider, so unsafe URLs cannot be stored and activated later.
+        if key in patch and patch[key]:
             try:
                 patch[key] = validate_ai_base_url(
                     str(patch[key]), setting_name=label
