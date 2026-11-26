@@ -41,7 +41,7 @@ call :find_npm
 if defined NPM_CMD (
   echo [4/4] Building frontend...
   pushd frontend
-  call "%NPM_CMD%" install
+  call "%NPM_CMD%" ci
   if errorlevel 1 (
     popd
     echo [WARN] npm install failed. The existing frontend\dist may still work.
