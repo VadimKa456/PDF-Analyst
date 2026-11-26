@@ -118,6 +118,8 @@ def test_ai_client_availability_does_not_require_network() -> None:
         "http://10.0.0.5:8000",
         "https://provider.example/v1?mode=test",
         "https://service.internal/v1",
+        "https://bad_host.example/v1",
+        "https://provider.example:0/v1",
         "file:///tmp/sample",
     ],
 )
@@ -229,6 +231,11 @@ class _FakeOpenAIHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         type(self).seen.append((self.path, self.headers.get("Authorization")))
+        if self.path.startswith("/redirect/"):
+            self.send_response(302)
+            self.send_header("Location", "/v1/models")
+            self.end_headers()
+            return
         if self.path.endswith("/models"):
             self._send({"data": [{"id": "test-model"}]})
         else:
@@ -299,6 +306,24 @@ def test_openai_compatible_api_round_trip(fake_openai: str) -> None:
     paths = [path for path, _ in _FakeOpenAIHandler.seen]
     assert paths == ["/v1/chat/completions", "/v1/models", "/v1/embeddings"]
     assert all(auth == "Bearer sk-test" for _, auth in _FakeOpenAIHandler.seen)
+
+
+def test_openai_client_does_not_follow_redirects_with_api_key(fake_openai: str) -> None:
+    client = AIClient(
+        {
+            "ai_provider": "openai",
+            "openai_api_key": "sk-test",
+            "openai_base_url": fake_openai.replace("/v1", "/redirect/v1"),
+            "openai_model": "test-model",
+            "ai_timeout_seconds": 5,
+        }
+    )
+
+    with pytest.raises(AIError):
+        client.list_models()
+
+    paths = [path for path, _ in _FakeOpenAIHandler.seen]
+    assert paths == ["/redirect/v1/models"]
 
 
 def test_openai_retries_transient_503(fake_openai: str, monkeypatch: pytest.MonkeyPatch) -> None:
