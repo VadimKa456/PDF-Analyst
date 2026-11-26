@@ -61,8 +61,10 @@ Copy-Item -LiteralPath $rusModel -Destination (Join-Path $tessdata "rus.trainedd
 # Expose the executable to later GitHub Actions steps and pytest/pytesseract.
 $tesseractDir = Split-Path -Parent $tesseract
 Add-Content -Path $env:GITHUB_ENV -Value "TESSERACT_CMD=$tesseract"
+Add-Content -Path $env:GITHUB_ENV -Value "TESSDATA_PREFIX=$tessdata"
 Add-Content -Path $env:GITHUB_PATH -Value $tesseractDir
 $env:TESSERACT_CMD = $tesseract
+$env:TESSDATA_PREFIX = $tessdata
 $env:Path = "$tesseractDir;$env:Path"
 
 $languages = (& $tesseract --list-langs 2>&1 | Out-String)
