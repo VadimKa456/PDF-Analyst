@@ -2,11 +2,16 @@
 from __future__ import annotations
 
 import socket
+import ipaddress
 
 import httpcore
 import pytest
 
-from app.services.ai_transport import resolve_checked_addresses
+from app.services.ai_transport import (
+    SafeAITransport,
+    _CheckedNetworkBackend,
+    resolve_checked_addresses,
+)
 
 
 def _dns_record(ip: str, port: int = 443):
@@ -98,3 +103,83 @@ def test_dns_failure_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(httpcore.ConnectError, match="Unable to resolve"):
         resolve_checked_addresses("provider.example", 443)
+
+def test_checked_backend_pins_tcp_to_numeric_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    expected_stream = object()
+
+    monkeypatch.setattr(
+        "app.services.ai_transport.resolve_checked_addresses",
+        lambda host, port: [ipaddress.ip_address("93.184.216.34")],
+    )
+
+    def fake_connect_tcp(
+        self,
+        host,
+        port,
+        timeout=None,
+        local_address=None,
+        socket_options=None,
+    ):
+        captured.update(
+            host=host,
+            port=port,
+            timeout=timeout,
+            local_address=local_address,
+            socket_options=socket_options,
+        )
+        return expected_stream
+
+    monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", fake_connect_tcp)
+    backend = _CheckedNetworkBackend()
+    result = backend.connect_tcp(
+        "provider.example",
+        443,
+        timeout=2.5,
+        local_address="0.0.0.0",
+        socket_options=[(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)],
+    )
+
+    assert result is expected_stream
+    assert captured["host"] == "93.184.216.34"
+    assert captured["host"] != "provider.example"
+    assert captured["port"] == 443
+    assert captured["timeout"] == 2.5
+    assert captured["local_address"] == "0.0.0.0"
+    assert captured["socket_options"] == [(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)]
+
+
+def test_checked_backend_fails_before_opening_socket_on_unsafe_dns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempted_socket = False
+
+    def reject_resolution(host: str, port: int):
+        raise httpcore.ConnectError("resolved to a non-public address")
+
+    def fake_connect_tcp(self, host, port, **kwargs):
+        nonlocal attempted_socket
+        attempted_socket = True
+        raise AssertionError("socket must not be opened for an unsafe address")
+
+    monkeypatch.setattr(
+        "app.services.ai_transport.resolve_checked_addresses",
+        reject_resolution,
+    )
+    monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", fake_connect_tcp)
+
+    with pytest.raises(httpcore.ConnectError, match="non-public address"):
+        _CheckedNetworkBackend().connect_tcp("provider.example", 443)
+
+    assert attempted_socket is False
+
+
+def test_safe_http_transport_installs_checked_backend_and_disables_proxies() -> None:
+    transport = SafeAITransport()
+    try:
+        assert isinstance(transport._pool._network_backend, _CheckedNetworkBackend)
+        assert transport._pool._proxy is None
+    finally:
+        transport.close()
