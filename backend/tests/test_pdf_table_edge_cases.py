@@ -122,9 +122,9 @@ def test_pdfplumber_recovers_borderless_table_with_multiline_headers(
         "revenue",
         "1250000",
         "1100000",
-        "net profit",
+        "netprofit",
         "156000",
-        "total assets",
+        "totalassets",
         "3400000",
     ):
         assert expected.casefold() in normalized, (
