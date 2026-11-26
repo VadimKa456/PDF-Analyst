@@ -550,7 +550,7 @@ python _final_e2e.py
 |----------|---------|
 | `Port 8000 is already in use` | Остановите другой процесс или задайте `PORT=8001` в `.env` |
 | `Tesseract not found` | Установите Tesseract с русским языком; укажите путь в Settings или `TESSERACT_CMD` |
-| `Frontend ещё не собран` | После клонирования выполняется `cd frontend && npm install && npm run build` (каталог `dist` не хранится в Git) |
+| `Frontend ещё не собран` | После клонирования выполняется `cd frontend && npm ci && npm run build` (каталог `dist` не хранится в Git) |
 | `node`/`npm` не найдены | Установите Node.js 18+ или скачайте готовый desktop-установщик из [Releases](https://github.com/VadimKa456/PDF-Analyst/releases/latest) |
 | Русский текст в OCR не распознаётся | Проверьте `rus.traineddata` и языки в Settings (`rus+eng`) |
 | Медленная обработка сканов | Уменьшите `OCR_DPI` (например, 200) или отключите OCR для текстовых PDF |
