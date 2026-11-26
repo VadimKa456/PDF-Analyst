@@ -182,3 +182,15 @@ def test_guard_is_inactive_outside_desktop_mode() -> None:
         response = client.get("/api/data")
 
     assert response.status_code == 200
+
+def test_malformed_cookie_is_rejected_without_server_error() -> None:
+    with _client() as client:
+        response = client.get(
+            "/api/data",
+            headers={
+                "host": EXPECTED_HOST,
+                "cookie": f"{SESSION_COOKIE_NAME}=%FF",
+            },
+        )
+
+    assert response.status_code == 401
