@@ -57,11 +57,17 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - name: Build frontend for the portable desktop package
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
       - name: Create bootstrap Python 3.12 environment
         run: python -m venv .venv
       - name: Build portable desktop application from the hash lock
         env:
           PDF_ANALYST_SKIP_INSTALLER: "1"
+          PDF_ANALYST_FRONTEND_READY: "1"
         shell: pwsh
         run: |
           cmd /c build_desktop.bat
