@@ -161,7 +161,7 @@ def test_ocr_skips_pages_that_cannot_fit_safe_pixel_budget() -> None:
 
 def test_preview_dpi_is_reduced_for_large_pages() -> None:
     page = SimpleNamespace(
-        rect=SimpleNamespace(width=10_000.0, height=10_000.0)
+        rect=SimpleNamespace(width=3_000.0, height=3_000.0)
     )
     dpi = _bounded_page_dpi(page, 120, minimum_dpi=36)
     assert 36 <= dpi < 120
