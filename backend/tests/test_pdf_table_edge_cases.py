@@ -7,7 +7,6 @@ not PDFium's text extraction path.
 from __future__ import annotations
 
 from pathlib import Path
-import re
 
 import pdfplumber
 from reportlab.lib import colors
@@ -114,10 +113,6 @@ def test_pdfplumber_recovers_borderless_table_with_multiline_headers(
         if cell is not None
     )
     normalized = " ".join(flattened.split()).casefold()
-    # pdfplumber text-strategy boundaries can insert spaces inside words
-    # (for example, "ye ar ended" or "total asse ts"). Compare a compact
-    # representation so these layout artifacts do not cause false failures.
-    compact = re.sub(r"\s+", "", normalized)
 
     for expected in (
         "financial indicator",
@@ -132,6 +127,6 @@ def test_pdfplumber_recovers_borderless_table_with_multiline_headers(
         "total assets",
         "3400000",
     ):
-        assert re.sub(r"\s+", "", expected.casefold()) in compact, (
+        assert expected.casefold() in normalized, (
             f"Borderless table extraction missed {expected!r}; extracted: {normalized!r}"
         )
