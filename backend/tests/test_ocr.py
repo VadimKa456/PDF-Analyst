@@ -63,7 +63,7 @@ def test_ocr_numbers_with_lost_thousand_separators_are_merged(
     assert by_period["2024"].source_ref.startswith("p1:")
     # значение не потеряло разряды и нормализовано с учётом тыс. руб.
     assert by_period["2024"].normalized_value == pytest.approx(1_660_936_000.0)
-    assert "1660 936" in (by_period["2024"].context or "")
+    assert "1 660 936" in (by_period["2024"].context or "")
 
 
 def test_ocr_metrics_keep_sources_and_confidence(scanned: DocumentExtraction) -> None:
