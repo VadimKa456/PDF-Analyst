@@ -1,6 +1,6 @@
 ---
 name: PDF Evidence Analyst
-description: Analyzes one or more PDF documents with page-level evidence, checks numbers and claims, compares versions, and produces a traceable findings report.
+description: Use when the user asks to analyze PDFs, verify figures or claims, compare document versions, find contradictions, or produce a source-cited document review.
 summary: Turn PDF files into an evidence-backed analysis: extract key facts, verify calculations, flag contradictions and missing evidence, and cite every finding to its source page.
 version: 1.0.0
 tags:
