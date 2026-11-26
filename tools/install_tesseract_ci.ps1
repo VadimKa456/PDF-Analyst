@@ -3,12 +3,12 @@ Set-StrictMode -Version Latest
 
 # Reproducible Windows OCR test dependency:
 # - Official Tesseract 5.5.3 Windows installer, SHA-256 pinned.
-# - Official tessdata_fast Russian model pinned by immutable Git commit + blob SHA.
+# - Official tessdata_best Russian model pinned by immutable Git commit + blob SHA.
 $installerUrl = "https://github.com/tesseract-ocr/tesseract/releases/download/5.5.3/tesseract-ocr-w64-setup-5.5.3.20260724.exe"
 $installerSha256 = "BEE9E3434BD94FD65387D9BE28CD467A41F61B1275383B55B0F59A1331270AE4"
-$tessdataCommit = "87416418657359cb625c412a48b6e1d6d41c29bd"
-$rusBlobSha = "b146cb2263acbc6383f8e92ea0ce759537687bb8"
-$rusSize = 3861738
+$tessdataCommit = "e12c65a915945e4c28e237a9b52bc4a8f39a0cec"
+$rusBlobSha = "702e3c43c863cf3325002c9d2cc38045e01314a9"
+$rusSize = 15301764
 
 $installer = Join-Path $env:RUNNER_TEMP "tesseract-ocr-w64-setup-5.5.3.20260724.exe"
 Write-Host "Downloading official Tesseract 5.5.3 Windows installer..."
@@ -36,8 +36,8 @@ if (-not (Test-Path -LiteralPath $tessdata -PathType Container)) {
 }
 
 $rusModel = Join-Path $env:RUNNER_TEMP "rus.traineddata"
-$rusUrl = "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/$tessdataCommit/rus.traineddata"
-Write-Host "Downloading Russian tessdata_fast model pinned to $tessdataCommit..."
+$rusUrl = "https://raw.githubusercontent.com/tesseract-ocr/tessdata_best/$tessdataCommit/rus.traineddata"
+Write-Host "Downloading high-accuracy Russian tessdata_best model pinned to $tessdataCommit..."
 Invoke-WebRequest -Uri $rusUrl -OutFile $rusModel
 
 $rusLength = (Get-Item -LiteralPath $rusModel).Length
