@@ -37,8 +37,12 @@ jobs:
   desktop-lock:
     name: Desktop lock (Windows, Python 3.12)
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -67,6 +71,22 @@ jobs:
             requirements-desktop-lock.txt
             ${{ runner.temp }}/pdf-analyst-desktop-lock/
           if-no-files-found: error
+      - name: Commit the validated lock to the PR branch
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add requirements-desktop-lock.txt
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "build: add hash-pinned desktop dependency lock"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            git push origin "HEAD:$env:BRANCH_NAME"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
   frontend:
     name: Frontend (typecheck + build)
