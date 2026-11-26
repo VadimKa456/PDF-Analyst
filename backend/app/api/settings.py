@@ -55,11 +55,18 @@ def get_settings(db: Session = Depends(get_db)):
 
 
 def _validate_patch(patch: dict[str, Any]) -> dict[str, Any]:
-    for key, label in (
-        ("openai_base_url", "OpenAI-compatible endpoint"),
-        ("ollama_base_url", "Ollama endpoint"),
+    selected_provider = str(patch.get("ai_provider") or "").lower()
+    for key, provider, label in (
+        ("openai_base_url", "openai", "OpenAI-compatible endpoint"),
+        ("ollama_base_url", "ollama", "Ollama endpoint"),
     ):
-        if key in patch and patch[key]:
+        # The settings form sends both provider URLs. Validate the active
+        # provider, or the URL itself when a client updates it independently.
+        if (
+            key in patch
+            and patch[key]
+            and (not selected_provider or selected_provider == provider)
+        ):
             try:
                 patch[key] = validate_ai_base_url(
                     str(patch[key]), setting_name=label
