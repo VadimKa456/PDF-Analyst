@@ -300,7 +300,6 @@ def build_scanned_pdf(path: Path) -> None:
     c.drawImage(ImageReader(io.BytesIO(png)), 0, 0, width=A4[0], height=A4[1])
     c.showPage()
     c.save()
-    source.unlink(missing_ok=True)
 
 
 def main() -> None:
