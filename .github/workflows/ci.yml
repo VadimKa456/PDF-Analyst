@@ -52,24 +52,47 @@ jobs:
           python -m pip install pip-tools==7.7.0
       - name: Compile hash-pinned desktop requirements
         run: python -m piptools compile --resolver=backtracking --generate-hashes --allow-unsafe --output-file=requirements-desktop-lock.txt requirements-desktop.in
-      - name: Create clean verification environment
-        run: python -m venv .build-venv
-      - name: Install exact lock into clean environment
-        run: '& .\\.build-venv\\Scripts\\python.exe -m pip install --require-hashes -r requirements-desktop-lock.txt'
-      - name: Check locked dependency consistency
-        run: '& .\\.build-venv\\Scripts\\python.exe -m pip check'
-      - name: Run backend tests in clean locked environment
-        working-directory: backend
-        run: '& ..\\.build-venv\\Scripts\\python.exe -m pytest -q'
-      - name: Generate locked Python SBOM
-        run: '& .\\.build-venv\\Scripts\\python.exe tools\\generate_compliance_inventory.py --python-only --output-dir "${{ runner.temp }}\\pdf-analyst-desktop-lock"'
-      - name: Upload validated desktop lock and inventory
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Create bootstrap Python 3.12 environment
+        run: python -m venv .venv
+      - name: Build portable desktop application from the hash lock
+        env:
+          PDF_ANALYST_SKIP_INSTALLER: "1"
+        shell: pwsh
+        run: |
+          cmd /c build_desktop.bat
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify portable EXE and compliance inventory
+        shell: pwsh
+        run: |
+          $required = @(
+            "dist\\PDF Analyst\\PDF Analyst.exe",
+            "dist\\PDF Analyst\\compliance\\sbom-python.cdx.json",
+            "dist\\PDF Analyst\\compliance\\sbom-frontend.cdx.json",
+            "dist\\PDF Analyst\\compliance\\THIRD_PARTY_NOTICES.md",
+            "dist\\PDF Analyst\\compliance\\python-environment.txt"
+          )
+          foreach ($file in $required) {
+            if (-not (Test-Path $file)) { throw "Required build output missing: $file" }
+          }
+      - name: Upload validated desktop lock and compliance inventory
         uses: actions/upload-artifact@v4
         with:
           name: pdf-analyst-desktop-lock
           path: |
             requirements-desktop-lock.txt
-            ${{ runner.temp }}/pdf-analyst-desktop-lock/
+            dist/PDF Analyst/compliance/
+          if-no-files-found: error
+      - name: Upload portable Windows smoke build
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-analyst-portable-smoke-build
+          path: dist/PDF Analyst/
+          compression-level: 1
           if-no-files-found: error
       - name: Commit the validated lock to the PR branch
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
