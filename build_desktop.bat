@@ -42,38 +42,37 @@ echo [3/8] Running backend regression tests in the locked environment...
 "%PY%" -m pytest -q
 if errorlevel 1 goto :fail
 
-echo [4/8] Building frontend from package-lock.json...
-set "NODE_DIR="
-set "NPM_CMD="
-for /f "delims=" %%i in ('where node 2^>nul') do (
-  if not defined NODE_DIR set "NODE_DIR=%%~dpi"
-)
-if defined NODE_DIR if exist "%NODE_DIR%npm.cmd" set "NPM_CMD=%NODE_DIR%npm.cmd"
-if not defined NPM_CMD (
-  for /d %%d in ("%LOCALAPPDATA%\nodejs\node-*") do (
-    if not defined NPM_CMD if exist "%%d\npm.cmd" set "NPM_CMD=%%d\npm.cmd"
-  )
-)
-if defined NPM_CMD (
-  pushd frontend
-  call "%NPM_CMD%" ci
-  if errorlevel 1 (
-    popd
-    goto :fail
-  )
-  call "%NPM_CMD%" run build
-  if errorlevel 1 (
-    popd
-    goto :fail
-  )
-  popd
-) else (
+echo [4/8] Preparing frontend assets...
+if /I "%PDF_ANALYST_FRONTEND_READY%"=="1" (
   if not exist "frontend\dist\index.html" (
-    echo [ERROR] Node.js/npm is required to build the frontend.
-    exit /b 1
+    echo [ERROR] CI marked frontend as ready, but frontend\dist\index.html is missing.
+    goto :fail
   )
-  echo [WARN] Node.js/npm not found. Using the existing frontend\dist.
-  echo        For a reproducible release, install Node.js 22 and rebuild.
+  echo [INFO] Using the frontend build produced by the pinned Node.js/npm CI step.
+) else (
+  set "NPM_CMD="
+  for /f "delims=" %%i in ('where npm.cmd 2^>nul') do call :try_npm "%%i"
+  if defined NPM_CMD (
+    pushd frontend
+    call "%NPM_CMD%" ci
+    if errorlevel 1 (
+      popd
+      goto :fail
+    )
+    call "%NPM_CMD%" run build
+    if errorlevel 1 (
+      popd
+      goto :fail
+    )
+    popd
+  ) else (
+    if not exist "frontend\dist\index.html" (
+      echo [ERROR] Node.js/npm is required to build the frontend.
+      goto :fail
+    )
+    echo [WARN] No working npm.cmd was found. Using the existing frontend\dist.
+    echo        Install Node.js 22 and rebuild for a reproducible release.
+  )
 )
 
 echo [5/8] Running PyInstaller...
@@ -104,7 +103,14 @@ if not exist "dist\PDF Analyst\compliance\sbom-frontend.cdx.json" (
 echo [8/8] Building installer (Inno Setup)...
 if /I "%PDF_ANALYST_SKIP_INSTALLER%"=="1" (
   echo [INFO] Inno Setup step skipped by PDF_ANALYST_SKIP_INSTALLER=1.
-  goto :success
+  goto :try_npm
+if defined NPM_CMD exit /b 0
+if not exist "%~1" exit /b 0
+call "%~1" --version >nul 2>nul
+if not errorlevel 1 set "NPM_CMD=%~1"
+exit /b 0
+
+:success
 )
 set "ISCC="
 if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
