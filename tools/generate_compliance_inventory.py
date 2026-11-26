@@ -103,11 +103,20 @@ def licence_choice(name: str, version: str, meta: metadata.PackageMetadata) -> l
 
 
 def find_licence_files(files) -> list:
+    """Find license files by name and standard bundled-license directories.
+
+    Some wheels (notably PDFium-based packages) keep third-party notices in
+    BUILD_LICENSES/ or LICENSES/ with names such as "abseil.txt" and
+    "pdfium.txt". Those files are still required notices even though their
+    filenames do not begin with LICENSE/COPYING/NOTICE.
+    """
     result = []
     for item in files or []:
         path = Path(str(item))
         filename = path.name.lower()
-        if not filename.startswith(LICENSE_PREFIXES):
+        parent_parts = {part.lower() for part in path.parts[:-1]}
+        in_license_directory = bool(parent_parts & {"licenses", "build_licenses"})
+        if not filename.startswith(LICENSE_PREFIXES) and not in_license_directory:
             continue
         if path.suffix.lower() not in {"", ".txt", ".md", ".rst", ".html"}:
             continue
