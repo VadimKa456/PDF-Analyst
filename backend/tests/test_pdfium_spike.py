@@ -65,5 +65,6 @@ def test_pdfium_reports_rotated_page_geometry(tmp_path: Path) -> None:
     assert len(pages) == 1
     assert pages[0].width > 0
     assert pages[0].height > 0
+    assert pages[0].rotation == 90
     assert pages[0].width > pages[0].height
     assert "Rotated page geometry check" in pages[0].text
