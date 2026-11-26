@@ -55,10 +55,12 @@ jobs:
           cache-dependency-path: |
             requirements.txt
             requirements-pdf-engine-spike.txt
-      - name: Install project test dependencies and experimental engine
+      - name: Install baseline and experimental PDF engines
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest reportlab -r requirements-pdf-engine-spike.txt
-      - name: Run isolated PDFium smoke tests
+          python -m pip install -r requirements.txt -r requirements-pdf-engine-spike.txt
+      - name: Generate deterministic PDF comparison corpus
+        run: python samples/generate_samples.py
+      - name: Run PDFium smoke and baseline comparison tests
         working-directory: backend
-        run: python -m pytest -q tests/test_pdfium_spike.py
+        run: python -m pytest -q tests/test_pdfium_spike.py tests/test_pdfium_corpus.py
