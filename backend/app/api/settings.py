@@ -161,11 +161,11 @@ def _runtime_with_overrides(db: Session, body: dict[str, Any] | None) -> dict[st
         ("openai_base_url", "OpenAI-compatible endpoint"),
         ("ollama_base_url", "Ollama endpoint"),
     ):
+        configured_url = str(runtime.get(key) or "").strip()
+        if not configured_url:
+            continue
         try:
-            runtime[key] = validate_ai_base_url(
-                str(runtime.get(key) or ""),
-                setting_name=label,
-            )
+            runtime[key] = validate_ai_base_url(configured_url, setting_name=label)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
     return runtime
