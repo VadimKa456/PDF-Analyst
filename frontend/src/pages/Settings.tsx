@@ -283,6 +283,9 @@ export default function SettingsPage() {
                       onChange={(e) => set("openai_base_url", e.target.value)}
                       placeholder="https://api.openai.com/v1"
                     />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Для удалённого провайдера нужен HTTPS. HTTP разрешён только для localhost.
+                    </p>
                   </div>
                   <div>
                     <div className="label">API key {settings.openai_api_key_masked && `(сохранён: ${settings.openai_api_key_masked})`}</div>
@@ -342,6 +345,9 @@ export default function SettingsPage() {
                       onChange={(e) => set("ollama_base_url", e.target.value)}
                       placeholder="http://127.0.0.1:11434"
                     />
+                    <p className="mt-1 text-xs text-slate-500">
+                      HTTP разрешён только для localhost. Удалённый Ollama endpoint должен использовать HTTPS.
+                    </p>
                   </div>
                   <div>
                     <div className="label">Модель</div>
