@@ -39,10 +39,33 @@ Before selling a new installer, choose and document one compliant route:
 Do not describe the complete installer as "MIT-only" while this dependency
 remains unresolved.
 
-## Versions observed in the 26 Nov 2026 CI inventory
+### Artifex commercial options to request
 
-The successful Windows/Python 3.12 compliance artifact for commit
-`28654d46e7c55a1bae04ff9ce0e781a94cd53ad8` recorded these resolved versions:
+Artifex's public licensing page describes two commercial models:
+
+- **OEM Distribution:** customer-facing redistribution without AGPL source
+  disclosure, annual distribution-volume reporting, support, and a per-copy
+  charge with a quarterly minimum.
+- **Subscription:** also described as per-copy with a quarterly minimum;
+  internal-use subscriptions do not require a distribution report.
+
+Artifex states that commercial licenses are tailored to the individual use
+case. The public page does not list a price. Sources:
+- https://artifex.com/licensing
+- https://pymupdf.io/licensing
+
+For PDF Analyst, request a written quote for the standalone Windows desktop
+application, including bundling PyMuPDF/MuPDF 1.28.2 in a PyInstaller portable
+folder and Inno Setup installer, sales to end users, updates, trial copies,
+and expected annual copy volume. Ask Artifex to confirm in writing which
+commercial model covers this distribution. OEM Distribution is the first model
+to ask about because the product is redistributed to customers, but this is
+not a legal conclusion or a purchase decision. Do not publish or sell a new
+installer until the scope and fee are clear.
+
+## Versions observed in the 26 Nov 2026 Windows CI inventory
+
+The successful Windows/Python 3.12 compliance artifacts on 26 Nov 2026 recorded these resolved versions (the same major set is present in the hash-pinned desktop build):
 
 | Component | CI-resolved version | License finding |
 |---|---:|---|
@@ -130,6 +153,36 @@ The pypdfium2 notice collection issue is therefore resolved at the inventory
 level for this CI build. This does not by itself establish that every listed
 native component is actually linked into the Windows binary or replace a
 release-specific legal review.
+
+### Verification from Run #71 portable build (26 Nov 2026)
+
+The latest Windows/Python 3.12 run for commit
+`789550563e2ad0dd1759cbfa592839b3da72a506` passed Backend, Frontend, hash-lock
+installation, `pip check`, the locked-environment test suite, PyInstaller
+portable packaging, and checks for required compliance files. The build
+artifact is a portable folder; CI intentionally skipped the Inno Setup
+installer and did not run an interactive WebView2 session.
+
+The Run #71 Python compliance ZIP was inspected directly:
+- `pymupdf==1.28.2` has only a 64-byte `COPYING` file containing the dual-license
+  pointer; it does not include the full AGPLv3 license text.
+- `opencv-python-headless==5.1.0.95` includes a 184,724-byte
+  `LICENSE-3RD-PARTY.txt`; it explicitly says FFmpeg is redistributed in the
+  wheel and includes LGPL 2.1 text.
+- `pypdfium2==5.15.2` includes its PDFium and third-party license texts.
+- `clr_loader==0.3.1` still has UNKNOWN SBOM metadata, although its copied
+  wheel `LICENSE` file contains MIT text.
+- `proxy_tools==0.1.0` still has a metadata/source discrepancy and no copied
+  license text in the wheel inventory.
+
+Artifact references:
+- https://github.com/VadimKa456/PDF-Analyst/actions/runs/45809014870
+- Python inventory: https://github.com/VadimKa456/PDF-Analyst/actions/runs/45809014870/artifacts/15110937671
+- Portable Windows build: https://github.com/VadimKa456/PDF-Analyst/actions/runs/45809014870/artifacts/15111520762
+
+This run confirms the package build and inventory steps. It does not prove
+interactive operation on Windows 10/11 or settle any third-party license
+obligation.
 
 ## Other components to review
 
