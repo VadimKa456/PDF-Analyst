@@ -9,8 +9,18 @@ if not exist "..\.venv\Scripts\python.exe" (
   if errorlevel 1 exit /b 1
 )
 
+echo Generating isolated synthetic PDF fixtures...
+set "PDF_ANALYST_SAMPLES_DIR=%TEMP%\PDF Analyst tests\pdfs"
+"..\.venv\Scripts\python.exe" "..\samples\generate_samples.py"
+if errorlevel 1 (
+  echo.
+  echo Failed to generate synthetic PDF fixtures.
+  exit /b 1
+)
+
 echo Running pytest...
 "..\.venv\Scripts\python.exe" -m pytest -q
+set "PDF_ANALYST_SAMPLES_DIR="
 if errorlevel 1 (
   echo.
   echo Tests failed.
