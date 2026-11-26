@@ -306,7 +306,14 @@ def _preprocess_for_ocr(image: Image.Image, threshold: bool = True) -> Image.Ima
         target = 2000
         if gray.shape[1] < target:
             scale = target / gray.shape[1]
-            gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+            source_pixels = int(gray.shape[0]) * int(gray.shape[1])
+            if source_pixels > 0:
+                safe_scale = math.sqrt(MAX_PAGE_PIXELS / source_pixels)
+                scale = min(scale, safe_scale)
+            if scale > 1.0:
+                gray = cv2.resize(
+                    gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC
+                )
         gray = _deskew_image(gray)
         gray = cv2.fastNlMeansDenoising(gray, h=10)
         if not threshold:
