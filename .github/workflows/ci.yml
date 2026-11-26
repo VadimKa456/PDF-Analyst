@@ -51,14 +51,14 @@ jobs:
       - name: Create clean verification environment
         run: python -m venv .build-venv
       - name: Install exact lock into clean environment
-        run: .build-venv\\Scripts\\python.exe -m pip install --require-hashes -r requirements-desktop-lock.txt
+        run: '& .\\.build-venv\\Scripts\\python.exe -m pip install --require-hashes -r requirements-desktop-lock.txt'
       - name: Check locked dependency consistency
-        run: .build-venv\\Scripts\\python.exe -m pip check
+        run: '& .\\.build-venv\\Scripts\\python.exe -m pip check'
       - name: Run backend tests in clean locked environment
         working-directory: backend
-        run: ..\\.build-venv\\Scripts\\python.exe -m pytest -q
+        run: '& ..\\.build-venv\\Scripts\\python.exe -m pytest -q'
       - name: Generate locked Python SBOM
-        run: .build-venv\\Scripts\\python.exe tools\\generate_compliance_inventory.py --python-only --output-dir "${{ runner.temp }}\\pdf-analyst-desktop-lock"
+        run: '& .\\.build-venv\\Scripts\\python.exe tools\\generate_compliance_inventory.py --python-only --output-dir "${{ runner.temp }}\\pdf-analyst-desktop-lock"'
       - name: Upload validated desktop lock and inventory
         uses: actions/upload-artifact@v4
         with:
