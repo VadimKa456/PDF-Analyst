@@ -38,12 +38,11 @@ if errorlevel 1 goto :fail
 "%PY%" -m pip check
 if errorlevel 1 goto :fail
 
-echo [3/8] Generating isolated synthetic PDF fixtures...
+echo [3/8] Generating isolated synthetic PDF fixtures and running backend regression tests...
 set "PDF_ANALYST_SAMPLES_DIR=%TEMP%\PDF Analyst tests\pdfs"
 "%PY%" "samples\generate_samples.py"
 if errorlevel 1 goto :fail
 
-echo [3/8] Running backend regression tests in the locked environment...
 "%PY%" -m pytest -q
 set "PDF_ANALYST_SAMPLES_DIR="
 if errorlevel 1 goto :fail
