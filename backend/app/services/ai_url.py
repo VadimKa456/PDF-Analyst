@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ipaddress
+import re
 from urllib.parse import urlsplit
 
 
@@ -65,9 +66,12 @@ def validate_ai_base_url(value: str, *, setting_name: str = "AI endpoint") -> st
 
     if address is None:
         try:
-            host.encode("idna")
+            ascii_host = host.encode("idna").decode("ascii")
         except UnicodeError:
             raise ValueError(f"{setting_name}: некорректное имя сервера.") from None
+        label = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+        if not re.fullmatch(rf"(?=.{1,253}$){label}(?:\.{label})*", ascii_host):
+            raise ValueError(f"{setting_name}: некорректное имя сервера.")
         if any(host.endswith(suffix) for suffix in _BLOCKED_LOCAL_SUFFIXES):
             raise ValueError(
                 f"{setting_name}: локальные DNS-имена не поддерживаются; "
@@ -80,7 +84,8 @@ def validate_ai_base_url(value: str, *, setting_name: str = "AI endpoint") -> st
             "HTTP разрешён только для localhost."
         )
 
-    # Accessing parsed.port above validates the numeric range. Keep the
-    # original path (some compatible providers host their API below a prefix).
-    _ = port
+    # Accessing parsed.port above validates the numeric range.
+    if port == 0:
+        raise ValueError(f"{setting_name}: порт 0 не является допустимым адресом сервера.")
+    # Keep the original path (some compatible providers host their API below a prefix).
     return raw.rstrip("/")
