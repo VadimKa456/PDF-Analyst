@@ -106,6 +106,31 @@ contains native binaries or redistributed third-party code. Release review
 must match the actual wheel and binaries used by PyInstaller, not only upstream
 repository files or package classifiers.
 
+### Verification from the latest Windows portable-build artifact (Run #69)
+
+The Run #69 compliance artifact (26 Nov 2026, commit `156b1eec2835f91a46609ec54cee9d0ffed35063`)
+was inspected after the generator change. It now contains the pypdfium2 5.15.2
+license files from both `BUILD_LICENSES/` and `LICENSES/`, including
+`pdfium.txt`, `pdfium-binaries.txt`, Abseil, FreeType, HarfBuzz, ICU, JPEG,
+OpenJPEG, PNG, TIFF, zlib, Brotli, V8 and other dependency notices. This
+confirms the license-directory traversal fix works in the actual Windows build
+environment, rather than only in a unit test.
+
+The same artifact also confirms:
+- `clr_loader 0.3.1` still has UNKNOWN license metadata in the SBOM, but an
+  MIT `LICENSE` text is included in the artifact and should be reviewed as the
+  license evidence for that exact wheel.
+- `proxy_tools 0.1.0` still declares MIT in PyPI metadata but has no license
+  text in the built inventory. Upstream source contains a BSD license file.
+  Keep this as an unresolved metadata/source discrepancy until the exact
+  source distribution is reconciled with its maintainer or the dependency is
+  replaced.
+
+The pypdfium2 notice collection issue is therefore resolved at the inventory
+level for this CI build. This does not by itself establish that every listed
+native component is actually linked into the Windows binary or replace a
+release-specific legal review.
+
 ## Other components to review
 
 - `opencv-python-headless`: the Python wheel declares an OpenCV license, but
