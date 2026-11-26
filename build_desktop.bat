@@ -26,23 +26,23 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [1/7] Creating a clean release environment...
+echo [1/8] Creating a clean release environment...
 if exist ".build-venv" rmdir /s /q ".build-venv"
 "%PY_BOOTSTRAP%" -m venv .build-venv
 if errorlevel 1 goto :fail
 set "PY=.build-venv\Scripts\python.exe"
 
-echo [1/7] Installing hash-pinned desktop dependencies...
+echo [2/8] Installing hash-pinned desktop dependencies...
 "%PY%" -m pip install --require-hashes -r requirements-desktop-lock.txt
 if errorlevel 1 goto :fail
 "%PY%" -m pip check
 if errorlevel 1 goto :fail
 
-echo [2/7] Running backend regression tests in the locked environment...
+echo [3/8] Running backend regression tests in the locked environment...
 "%PY%" -m pytest -q
 if errorlevel 1 goto :fail
 
-echo [3/7] Building frontend from package-lock.json...
+echo [4/8] Building frontend from package-lock.json...
 set "NPM_CMD="
 where npm >nul 2>nul
 if not errorlevel 1 set "NPM_CMD=npm"
@@ -78,11 +78,11 @@ if defined NPM_CMD (
   echo        For a reproducible release, install Node.js 22 and rebuild.
 )
 
-echo [4/7] Running PyInstaller...
+echo [5/8] Running PyInstaller...
 "%PY%" -m PyInstaller --noconfirm --clean pdf_analyst.spec
 if errorlevel 1 goto :fail
 
-echo [5/7] Copying runtime notes...
+echo [6/8] Copying runtime notes...
 if not exist "dist\PDF Analyst" (
   echo [ERROR] Build output not found: dist\PDF Analyst
   exit /b 1
@@ -91,7 +91,7 @@ if exist ".env.example" copy /Y ".env.example" "dist\PDF Analyst\.env.example" >
 if exist "LICENSE" copy /Y "LICENSE" "dist\PDF Analyst\LICENSE" >nul
 if exist "DESKTOP_BUILD.md" copy /Y "DESKTOP_BUILD.md" "dist\PDF Analyst\DESKTOP_BUILD.md" >nul
 
-echo [6/7] Generating dependency inventory and third-party notices...
+echo [7/8] Generating dependency inventory and third-party notices...
 "%PY%" "tools\generate_compliance_inventory.py" --output-dir "dist\PDF Analyst\compliance" --frontend-node-modules "frontend\node_modules"
 if errorlevel 1 goto :fail
 if not exist "dist\PDF Analyst\compliance\sbom-python.cdx.json" (
@@ -103,7 +103,11 @@ if not exist "dist\PDF Analyst\compliance\sbom-frontend.cdx.json" (
   goto :fail
 )
 
-echo [7/7] Building installer (Inno Setup)...
+echo [8/8] Building installer (Inno Setup)...
+if /I "%PDF_ANALYST_SKIP_INSTALLER%"=="1" (
+  echo [INFO] Inno Setup step skipped by PDF_ANALYST_SKIP_INSTALLER=1.
+  goto :success
+)
 set "ISCC="
 if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
 if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe" set "ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
@@ -136,8 +140,10 @@ if not exist "dist\installer\PDF-Analyst-Setup.exe" (
   exit /b 1
 )
 
+:success
 echo.
 echo Done. Portable app: dist\PDF Analyst\PDF Analyst.exe
+if /I "%PDF_ANALYST_SKIP_INSTALLER%"=="1" echo Installer build intentionally skipped.
 exit /b 0
 
 :fail
