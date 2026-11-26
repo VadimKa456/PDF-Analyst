@@ -23,6 +23,7 @@ class PdfiumPageSnapshot:
     text: str
     width: float
     height: float
+    rotation: int
 
 
 def inspect_pdf(path: str | Path) -> list[PdfiumPageSnapshot]:
@@ -34,6 +35,11 @@ def inspect_pdf(path: str | Path) -> list[PdfiumPageSnapshot]:
             for index in range(len(document)):
                 page = document[index]
                 width, height = page.get_size()
+                rotation = page.get_rotation()
+                # get_size() reports the unrotated page box. Expose display-oriented
+                # dimensions so callers see landscape geometry for 90/270 degree pages.
+                if rotation in (90, 270):
+                    width, height = height, width
                 text_page = page.get_textpage()
                 try:
                     text = text_page.get_text_bounded()
@@ -47,6 +53,7 @@ def inspect_pdf(path: str | Path) -> list[PdfiumPageSnapshot]:
                         text=text or "",
                         width=float(width),
                         height=float(height),
+                        rotation=int(rotation),
                     )
                 )
             return snapshots
