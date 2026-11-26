@@ -11,6 +11,7 @@ import logging
 import multiprocessing
 import os
 import shutil
+import secrets
 import socket
 import sys
 import threading
@@ -80,14 +81,21 @@ def _pick_port(preferred: int = 8000) -> int:
         return int(s.getsockname()[1])
 
 
-def _wait_server(url: str, timeout: float = 60.0) -> bool:
+def _wait_server(url: str, session_token: str, timeout: float = 60.0) -> bool:
+    """Wait for the server using a one-purpose internal health-check header."""
     import urllib.request
 
+    from backend.app.desktop_security import STARTUP_TOKEN_HEADER
+
+    request = urllib.request.Request(
+        url + "/api/health",
+        headers={STARTUP_TOKEN_HEADER: session_token},
+    )
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            with urllib.request.urlopen(url + "/api/health", timeout=2) as resp:
-                if 200 <= resp.status < 500:
+            with urllib.request.urlopen(request, timeout=2) as resp:
+                if resp.status == 200:
                     return True
         except Exception:
             time.sleep(0.3)
@@ -167,6 +175,14 @@ def main() -> int:
     port = _pick_port(int(getattr(settings, "port", 8000) or 8000))
     url = f"http://{host}:{port}"
 
+    # A fresh, process-local session secret. It is delivered to the browser only
+    # in an HttpOnly cookie after a genuine top-level navigation to the app.
+    session_token = secrets.token_urlsafe(32)
+    fastapi_app.state.desktop_security_enabled = True
+    fastapi_app.state.desktop_session_token = session_token
+    fastapi_app.state.desktop_expected_host = f"{host}:{port}"
+    fastapi_app.state.desktop_expected_origin = url
+
     config = uvicorn.Config(
         fastapi_app,
         host=host,
@@ -197,7 +213,7 @@ def main() -> int:
     thread = threading.Thread(target=server.run, daemon=True, name="uvicorn")
     thread.start()
 
-    if not _wait_server(url, timeout=60.0):
+    if not _wait_server(url, session_token, timeout=60.0):
         logger.error("Server did not start at %s", url)
         _show_error(
             "PDF Analyst — ошибка запуска",
