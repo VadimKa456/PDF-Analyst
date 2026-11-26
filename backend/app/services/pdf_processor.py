@@ -51,6 +51,9 @@ MAX_DOCUMENT_TEXT_CHARS = 5_000_000
 MAX_PAGE_PIXELS = 12_000_000
 MAX_TABLES_PER_PAGE = 100
 MAX_TABLE_CELLS = 20_000
+MAX_DOCUMENT_TABLES = 2_000
+MAX_DOCUMENT_TABLE_CELLS = 100_000
+MAX_DOCUMENT_METRICS = 50_000
 MIN_OCR_DPI = 150
 MIN_PREVIEW_DPI = 36
 MAX_OCR_PAGE_SECONDS = 30.0
@@ -1942,6 +1945,7 @@ def extract_document(
 
     plumber_doc = None
     total_text_chars = 0
+    total_table_cells = 0
     try:
         import pdfplumber
 
@@ -1993,6 +1997,14 @@ def extract_document(
                 else:
                     warnings.append(f"Стр. {idx + 1}: требуется OCR, но Tesseract недоступен.")
 
+            # OCR can generate more text than the original searchable layer;
+            # enforce the same page ceiling before table/metric extraction.
+            if len(text) > MAX_PAGE_TEXT_CHARS:
+                raise PDFResourceLimitError(
+                    f"Страница {idx + 1} содержит слишком много текста "
+                    f"(>{MAX_PAGE_TEXT_CHARS:,} символов)."
+                )
+
             page_tables: list[ExtractedTable] = []
             if method == "text":
                 page_tables.extend(_extract_tables_pymupdf(page, text))
@@ -2037,10 +2049,26 @@ def extract_document(
                 if sig in seen:
                     continue
                 seen.add(sig)
+                if (
+                    len(tables) >= MAX_DOCUMENT_TABLES
+                    or total_table_cells + cell_count > MAX_DOCUMENT_TABLE_CELLS
+                ):
+                    warnings.append(
+                        "Достигнут общий лимит табличных данных документа "
+                        f"({MAX_DOCUMENT_TABLES:,} таблиц / "
+                        f"{MAX_DOCUMENT_TABLE_CELLS:,} ячеек); оставшиеся таблицы пропущены."
+                    )
+                    continue
                 tables.append(t)
+                total_table_cells += cell_count
                 metrics.extend(_table_metrics(t, default_period, page_text=text))
             metrics.extend(_header_kv_metrics(text, idx + 1, default_period, confidence))
             metrics.extend(_text_metrics(text, idx + 1, default_period, confidence))
+            if len(metrics) > MAX_DOCUMENT_METRICS:
+                raise PDFResourceLimitError(
+                    "Документ содержит слишком много извлечённых показателей "
+                    f"(>{MAX_DOCUMENT_METRICS:,})."
+                )
             check_deadline(idx + 1)
             total_text_chars += len(text)
             if total_text_chars > MAX_DOCUMENT_TEXT_CHARS:
