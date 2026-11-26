@@ -5,6 +5,8 @@ from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
 
+from PIL import Image
+
 import pymupdf
 import pytest
 
@@ -15,6 +17,8 @@ from app.services.pdf_processor import (
     PDFResourceLimitError,
     _bounded_page_dpi,
     _clean_metric_label,
+    _ocr_page,
+    _ocr_words,
     _table_metrics,
     extract_document,
     render_page_png,
@@ -265,3 +269,113 @@ def test_table_metrics_prefix_subitems_with_their_section() -> None:
     assert len(revenue) == 2 and len(cost) == 2
     assert all(m.value > 0 for m in revenue)
     assert all(m.value < 0 for m in cost)
+
+def test_ocr_words_forwards_subprocess_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_image_to_data(_image, **kwargs):
+        captured.update(kwargs)
+        return {"text": [], "conf": []}
+
+    monkeypatch.setattr(
+        "app.services.pdf_processor.pytesseract.image_to_data",
+        fake_image_to_data,
+    )
+    _ocr_words(Image.new("RGB", (1, 1)), "eng", 3, timeout=4.25)
+
+    assert captured["timeout"] == 4.25
+
+
+def test_ocr_page_stops_after_tesseract_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakePage:
+        rect = SimpleNamespace(width=72.0, height=72.0)
+
+        def get_pixmap(self, **_kwargs):
+            return SimpleNamespace(
+                width=150,
+                height=150,
+                samples=bytes(150 * 150 * 3),
+            )
+
+    monkeypatch.setattr(
+        "app.services.pdf_processor._preprocess_variants",
+        lambda _image: {"adaptive": object(), "light": object(), "otsu": object()},
+    )
+    monkeypatch.setattr("app.services.pdf_processor.MAX_OCR_PAGE_SECONDS", 1.5)
+
+    calls: list[float] = []
+
+    def timed_out(_image, _lang, _psm, *, timeout: float):
+        calls.append(timeout)
+        raise RuntimeError("Tesseract process timeout")
+
+    monkeypatch.setattr("app.services.pdf_processor._ocr_words", timed_out)
+
+    with pytest.raises(PDFResourceLimitError, match="OCR остановлен"):
+        _ocr_page(FakePage(), "eng", {"dpi": 150}, page_number=4)
+
+    assert len(calls) == 1
+    assert 0 < calls[0] <= 1.5
+
+
+def test_ocr_page_keeps_best_pass_when_later_pass_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakePage:
+        rect = SimpleNamespace(width=72.0, height=72.0)
+
+        def get_pixmap(self, **_kwargs):
+            return SimpleNamespace(
+                width=150,
+                height=150,
+                samples=bytes(150 * 150 * 3),
+            )
+
+    monkeypatch.setattr(
+        "app.services.pdf_processor._preprocess_variants",
+        lambda _image: {"adaptive": object(), "light": object(), "otsu": object()},
+    )
+    calls = 0
+
+    def one_good_pass_then_timeout(_image, _lang, _psm, *, timeout: float):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return (
+                [{
+                    "text": "Revenue",
+                    "left": 0,
+                    "width": 40,
+                    "height": 12,
+                    "block": 1,
+                    "par": 1,
+                    "line": 1,
+                }],
+                92.0,
+            )
+        raise RuntimeError("Tesseract process timeout")
+
+    monkeypatch.setattr(
+        "app.services.pdf_processor._ocr_words", one_good_pass_then_timeout
+    )
+    warnings: list[str] = []
+
+    text, confidence, words = _ocr_page(
+        FakePage(),
+        "eng",
+        {"dpi": 150},
+        page_number=7,
+        warnings=warnings,
+    )
+
+    assert text == "Revenue"
+    assert confidence == 92.0
+    assert words
+    assert calls == 2
+    assert len(warnings) == 1
+    assert "Стр. 7" in warnings[0]
+    assert "тайм-аут" in warnings[0]
