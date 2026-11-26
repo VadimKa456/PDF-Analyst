@@ -16,7 +16,7 @@ if not exist ".venv\Scripts\python.exe" (
 set "PY=.venv\Scripts\python.exe"
 set "PIP=.venv\Scripts\pip.exe"
 
-echo [1/5] Installing desktop build dependencies...
+echo [1/6] Installing desktop build dependencies...
 "%PIP%" install --upgrade pip
 if exist "requirements-desktop.txt" (
   "%PIP%" install -r requirements-desktop.txt
@@ -26,7 +26,7 @@ if exist "requirements-desktop.txt" (
 if errorlevel 1 goto :fail
 
 if not exist "frontend\dist\index.html" (
-  echo [2/5] Building frontend...
+  echo [2/6] Building frontend...
   set "NPM_CMD="
   where npm >nul 2>nul
   if not errorlevel 1 set "NPM_CMD=npm"
@@ -50,10 +50,10 @@ if not exist "frontend\dist\index.html" (
   call "%NPM_CMD%" run build
   popd
 ) else (
-  echo [2/5] Frontend dist found - skipping build.
+  echo [2/6] Frontend dist found - skipping build.
 )
 
-echo [3/5] Running PyInstaller...
+echo [3/6] Running PyInstaller...
 "%PY%" -m PyInstaller --noconfirm --clean pdf_analyst.spec
 if errorlevel 1 goto :fail
 
