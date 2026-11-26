@@ -50,3 +50,20 @@ def test_pdfium_renders_png_and_rejects_invalid_page(tiny_pdf: Path) -> None:
 def test_pdfium_rejects_unreasonable_dpi(tiny_pdf: Path) -> None:
     with pytest.raises(ValueError, match="DPI"):
         render_page_png(tiny_pdf, 1, dpi=1)
+
+def test_pdfium_reports_rotated_page_geometry(tmp_path: Path) -> None:
+    """Rotated pages must expose usable, rotation-aware page dimensions."""
+    path = tmp_path / "rotated-page.pdf"
+    pdf = canvas.Canvas(str(path), pagesize=A4)
+    pdf.setPageRotation(90)
+    pdf.drawString(72, 780, "Rotated page geometry check")
+    pdf.showPage()
+    pdf.save()
+
+    pages = inspect_pdf(path)
+
+    assert len(pages) == 1
+    assert pages[0].width > 0
+    assert pages[0].height > 0
+    assert pages[0].width > pages[0].height
+    assert "Rotated page geometry check" in pages[0].text
