@@ -39,6 +39,36 @@ Before selling a new installer, choose and document one compliant route:
 Do not describe the complete installer as "MIT-only" while this dependency
 remains unresolved.
 
+## Versions observed in the 26 Nov 2026 CI inventory
+
+The successful Windows/Python 3.12 compliance artifact for commit
+`28654d46e7c55a1bae04ff9ce0e781a94cd53ad8` recorded these resolved versions:
+
+| Component | CI-resolved version | License finding |
+|---|---:|---|
+| PyMuPDF | 1.28.2 | Package metadata: dual licensed AGPLv3 / Artifex commercial |
+| opencv-python-headless | 5.1.0.95 | Package metadata: Apache-2.0; bundled third-party notice requires separate review |
+| numpy | 2.5.5 | BSD-3-Clause plus bundled third-party license expressions |
+| pandas | 3.1.1 | BSD-3-Clause |
+| FastAPI | 0.165.0 | MIT |
+| SQLAlchemy | 2.1.9 | MIT |
+
+These are versions resolved in the CI environment on 26 Nov 2026, **not a
+reconstruction of the libraries inside the published 19 Nov 2026 `v1.1.0`
+installer**. That earlier installer was not accompanied by a Python environment
+snapshot, so its exact PyMuPDF version remains unknown.
+
+In the inspected PyMuPDF 1.28.2 wheel, `COPYING` is only a 64-byte dual-license
+notice ("GNU AGPL 3.0 or Artifex Commercial License"), not the complete AGPLv3
+license text. The new compliance generator reports the missing/full-text issue;
+the release process must provide the applicable full license text and required
+source notices, or retain the applicable commercial entitlement.
+
+In the inspected opencv-python-headless 5.1.0.95 wheel, `LICENSE-3RD-PARTY.txt`
+states that FFmpeg is redistributed inside the package and includes an LGPL 2.1
+license text. The installer process must retain the applicable third-party
+notices and verify the actual native binaries included by PyInstaller.
+
 ## Other components to review
 
 - `opencv-python-headless`: the Python wheel declares an OpenCV license, but
