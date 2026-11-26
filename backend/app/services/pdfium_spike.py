@@ -37,6 +37,8 @@ def inspect_pdf(path: str | Path) -> list[PdfiumPageSnapshot]:
                 text_page = page.get_textpage()
                 try:
                     text = text_page.get_text_bounded()
+                    # PDFium emits CRLF line endings; normalize for downstream parsers.
+                    text = (text or "").replace("\\r\\n", "\\n").replace("\\r", "\\n")
                 finally:
                     text_page.close()
                 snapshots.append(
