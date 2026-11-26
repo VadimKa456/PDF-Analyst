@@ -16,7 +16,7 @@ if not exist ".venv\Scripts\python.exe" (
 set "PY=.venv\Scripts\python.exe"
 set "PIP=.venv\Scripts\pip.exe"
 
-echo [1/6] Installing desktop build dependencies...
+echo [1/7] Installing desktop build dependencies...
 "%PIP%" install --upgrade pip
 if exist "requirements-desktop.txt" (
   "%PIP%" install -r requirements-desktop.txt
@@ -24,9 +24,15 @@ if exist "requirements-desktop.txt" (
   "%PIP%" install pyinstaller==6.* pywebview==5.*
 )
 if errorlevel 1 goto :fail
+"%PY%" -m pip check
+if errorlevel 1 goto :fail
+
+echo [2/7] Running backend regression tests...
+"%PY%" -m pytest -q
+if errorlevel 1 goto :fail
 
 if not exist "frontend\dist\index.html" (
-  echo [2/6] Building frontend...
+  echo [3/7] Building frontend...
   set "NPM_CMD="
   where npm >nul 2>nul
   if not errorlevel 1 set "NPM_CMD=npm"
@@ -47,17 +53,25 @@ if not exist "frontend\dist\index.html" (
   )
   pushd frontend
   call "%NPM_CMD%" ci
+  if errorlevel 1 (
+    popd
+    goto :fail
+  )
   call "%NPM_CMD%" run build
+  if errorlevel 1 (
+    popd
+    goto :fail
+  )
   popd
 ) else (
-  echo [2/6] Frontend dist found - skipping build.
+  echo [3/7] Frontend dist found - skipping build.
 )
 
-echo [3/6] Running PyInstaller...
+echo [4/7] Running PyInstaller...
 "%PY%" -m PyInstaller --noconfirm --clean pdf_analyst.spec
 if errorlevel 1 goto :fail
 
-echo [4/6] Copying runtime notes...
+echo [5/7] Copying runtime notes...
 if not exist "dist\PDF Analyst" (
   echo [ERROR] Build output not found: dist\PDF Analyst
   exit /b 1
@@ -66,7 +80,7 @@ if exist ".env.example" copy /Y ".env.example" "dist\PDF Analyst\.env.example" >
 if exist "LICENSE" copy /Y "LICENSE" "dist\PDF Analyst\LICENSE" >nul
 if exist "DESKTOP_BUILD.md" copy /Y "DESKTOP_BUILD.md" "dist\PDF Analyst\DESKTOP_BUILD.md" >nul
 
-echo [5/6] Generating dependency inventory and third-party notices...
+echo [6/7] Generating dependency inventory and third-party notices...
 "%PY%" "tools\generate_compliance_inventory.py" --output-dir "dist\PDF Analyst\compliance" --frontend-node-modules "frontend\node_modules"
 if errorlevel 1 goto :fail
 if not exist "dist\PDF Analyst\compliance\sbom-python.cdx.json" (
@@ -78,7 +92,7 @@ if not exist "dist\PDF Analyst\compliance\sbom-frontend.cdx.json" (
   goto :fail
 )
 
-echo [6/6] Building installer (Inno Setup)...
+echo [7/7] Building installer (Inno Setup)...
 set "ISCC="
 if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
 if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe" set "ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
