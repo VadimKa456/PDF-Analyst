@@ -379,3 +379,19 @@ def test_ocr_page_keeps_best_pass_when_later_pass_times_out(
     assert len(warnings) == 1
     assert "Стр. 7" in warnings[0]
     assert "тайм-аут" in warnings[0]
+
+def test_pdf_processing_enforces_total_time_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "time-budget.pdf"
+    doc = pymupdf.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "Annual revenue 2025: 120")
+    doc.save(path)
+    doc.close()
+
+    monkeypatch.setattr(
+        "app.services.pdf_processor.MAX_DOCUMENT_PROCESS_SECONDS", 0.0
+    )
+    with pytest.raises(PDFResourceLimitError, match="общий лимит времени"):
+        extract_document(path, path.name, ocr_config={"enabled": False})
