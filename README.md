@@ -108,7 +108,7 @@ Edge WebView2 Runtime и Visual C++ Redistributable; для Tesseract OCR отк
 
 - **Windows 10/11** (приложение также работает на Linux/macOS, но скрипты запуска — для Windows).
 - **Python 3.11+** (проверено на 3.12).
-- **Node.js 18+** — только для сборки frontend из исходников (`npm install && npm run build`). Каталог `frontend/dist` не хранится в Git: при клонировании его нет, сборка создаётся локально (или используется готовый desktop-установщик из Releases).
+- **Node.js 18+** — только для сборки frontend из исходников (`npm ci && npm run build`). Каталог `frontend/dist` не хранится в Git: при клонировании его нет, сборка создаётся локально (или используется готовый desktop-установщик из Releases).
 - **Tesseract OCR** — только для сканированных PDF.
   - Windows: установите [Tesseract для Windows](https://github.com/UB-Mannheim/tesseract/wiki).
   - При установке отметьте язык **Russian** (файл `rus.traineddata`).
@@ -543,6 +543,15 @@ python _final_e2e.py
   сверять с оригиналами документов.
 
 ---
+
+## Лицензии и коммерческое распространение
+
+Собственная лицензия исходного кода проекта — MIT. У сторонних библиотек
+сохраняются их собственные условия. В частности, PyMuPDF/MuPDF предлагает
+AGPLv3 или отдельную коммерческую лицензию Artifex; перед продажей установщика
+необходимо выбрать и подтвердить подходящий путь. Подробный реестр вопросов:
+[docs/LICENSING_REVIEW.md](docs/LICENSING_REVIEW.md). Новые desktop-сборки
+создают SBOM и доступные third-party notices в каталоге `compliance/`.
 
 ## Устранение неполадок
 
