@@ -66,6 +66,33 @@ jobs:
         working-directory: backend
         run: python -m pytest -q tests/test_ocr.py
 
+  pdf-engine-benchmark:
+    name: PDF engine benchmark (non-gating)
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-pdf-engine-spike.txt
+      - name: Install benchmark dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-pdf-engine-spike.txt
+      - name: Run bounded synthetic benchmark
+        run: python scripts/benchmark_pdf_engines.py --pages 200 --repeats 3 --output benchmark-results.json
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-engine-benchmark
+          path: benchmark-results.json
+          if-no-files-found: ignore
+
   pdfium-comparison:
     name: PDFium vs PyMuPDF corpus comparison
     runs-on: windows-latest
