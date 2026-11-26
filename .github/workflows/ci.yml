@@ -33,6 +33,41 @@ jobs:
           path: ${{ runner.temp }}/pdf-analyst-compliance/python/
           if-no-files-found: error
 
+
+  desktop-lock:
+    name: Desktop lock (Windows, Python 3.12)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned lock generator
+        run: |
+          python -m pip install pip==26.3
+          python -m pip install pip-tools==7.7.0
+      - name: Compile hash-pinned desktop requirements
+        run: python -m piptools compile --resolver=backtracking --generate-hashes --allow-unsafe --output-file=requirements-desktop-lock.txt requirements-desktop.in
+      - name: Create clean verification environment
+        run: python -m venv .build-venv
+      - name: Install exact lock into clean environment
+        run: .build-venv\\Scripts\\python.exe -m pip install --require-hashes -r requirements-desktop-lock.txt
+      - name: Check locked dependency consistency
+        run: .build-venv\\Scripts\\python.exe -m pip check
+      - name: Run backend tests in clean locked environment
+        working-directory: backend
+        run: ..\\.build-venv\\Scripts\\python.exe -m pytest -q
+      - name: Generate locked Python SBOM
+        run: .build-venv\\Scripts\\python.exe tools\\generate_compliance_inventory.py --python-only --output-dir "${{ runner.temp }}\\pdf-analyst-desktop-lock"
+      - name: Upload validated desktop lock and inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-analyst-desktop-lock
+          path: |
+            requirements-desktop-lock.txt
+            ${{ runner.temp }}/pdf-analyst-desktop-lock/
+          if-no-files-found: error
+
   frontend:
     name: Frontend (typecheck + build)
     runs-on: windows-latest
