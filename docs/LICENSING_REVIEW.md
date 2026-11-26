@@ -230,6 +230,44 @@ been met. The Python SBOM includes build and test tools, marked with an
 `excluded` scope. Unknown license metadata and missing license texts are
 reported rather than guessed.
 
+## Commercial licensing decision and recommended path
+
+### Current recommendation: obtain an Artifex OEM/redistribution quote before changing the PDF engine
+
+The desktop product bundles PyMuPDF into a customer-facing Windows application. The official PyMuPDF licensing page explicitly describes OEM and embedded redistribution as commercial-license use cases and offers an Artifex commercial route alongside AGPLv3. The public licensing page directs prospective customers to Sales; no public price or standard per-install price was published when this review was checked on 26 Nov 2026.
+
+Official references:
+- https://pymupdf.io/licensing
+- https://artifex.com/contact
+- https://pymupdf.readthedocs.io/en/latest/about.html
+
+Ask Artifex to confirm in writing that its proposed grant covers all of the following:
+- bundling the PyMuPDF/MuPDF Windows wheel and native components inside the PDF Analyst installer/portable distribution;
+- commercial distribution to end customers, including paid downloads and future updates;
+- the intended sales territories, sales channels, number of installations/downloads, and whether licensing is per developer, per end user, per application, per deployment, or revenue-based;
+- use in an offline/local-first desktop product, with optional calls to customer-configured third-party AI providers;
+- required attribution, notices, technical support, maintenance period, and renewal/termination terms.
+
+Do not infer that a quote or a generic PyMuPDF commercial subscription automatically covers every bundled copy: obtain the actual license agreement and verify the redistribution scope before shipping a paid installer.
+
+### Fallback if the quote is uneconomic: perform a measured engine-replacement spike
+
+The current implementation uses PyMuPDF for several central operations: opening PDFs, extracting structured page text and words, detecting digital tables with `page.find_tables()`, rendering pages to pixmaps, and supporting OCR/preview paths. It is not a one-line dependency replacement.
+
+A plausible permissive-license direction is a combination of:
+- `pypdfium2` for PDFium-backed document access/rendering; its own license is Apache-2.0/BSD-3-Clause, while PDFium and its bundled third-party dependency notices must still ship with binary distributions;
+- the already-used `pdfplumber` for text/table extraction where its output passes the existing quality tests.
+
+Official references:
+- https://pypi.org/project/pypdfium2/
+- https://pypdfium2.readthedocs.io/en/stable/readme.html
+
+Before adopting this route, create a separate migration branch and compare both engines on every synthetic Russian/English/searchable/scanned PDF fixture. Require exact agreement for source-grounded financial values, page numbering, units, period labels, table rows, confidence bounds, rendering and export tests. Keep PyMuPDF available behind a temporary adapter during the experiment only; do not remove it from the commercial build until the replacement passes the full regression and Windows portable-build pipeline.
+
+### Release gate
+
+Until one of those paths is completed, treat the current technically validated portable build as an engineering/test artifact, not an approved proprietary commercial release. The MIT license on the project source does not by itself relicense PyMuPDF or the other third-party components.
+
 ## Release checklist
 
 - [ ] Build from a clean Python 3.12 virtual environment and run
