@@ -26,6 +26,25 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r ..\requirements.txt
+      - name: Install pinned Tesseract OCR and Russian language data
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP "tesseract-ocr-w64-setup-5.5.3.20260724.exe"
+          Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tesseract/releases/download/5.5.3/tesseract-ocr-w64-setup-5.5.3.20260724.exe" -OutFile $installer
+          $expectedHash = "BEE9E3434BD94FD65387D9BE28CD467A41F61B1275383B55B0F59A1331270AE4"
+          $actualHash = (Get-FileHash -Path $installer -Algorithm SHA256).Hash
+          if ($actualHash -ne $expectedHash) { throw "Tesseract installer SHA-256 mismatch: $actualHash" }
+          $process = Start-Process -FilePath $installer -ArgumentList "/S" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Tesseract installer failed with exit code $($process.ExitCode)" }
+          $tesseractDir = Join-Path $env:ProgramFiles "Tesseract-OCR"
+          $tesseractExe = Join-Path $tesseractDir "tesseract.exe"
+          $tessdataDir = Join-Path $tesseractDir "tessdata"
+          if (-not (Test-Path $tesseractExe)) { throw "Tesseract executable not found: $tesseractExe" }
+          $rusModel = Join-Path $tessdataDir "rus.traineddata"
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/rus.traineddata" -OutFile $rusModel
+          $languages = (& $tesseractExe --list-langs 2>&1) -join [Environment]::NewLine
+          if ($LASTEXITCODE -ne 0 -or $languages -notmatch "(?m)^eng$" -or $languages -notmatch "(?m)^rus$") { throw "Tesseract eng/rus language data is not available: $languages" }
+          "TESSERACT_CMD=$tesseractExe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Generate isolated synthetic PDF fixtures
         env:
           PDF_ANALYST_SAMPLES_DIR: ${{ runner.temp }}\pdf-analyst-test-pdfs
@@ -74,6 +93,25 @@ jobs:
           npm run build
       - name: Create bootstrap Python 3.12 environment
         run: python -m venv .venv
+      - name: Install pinned Tesseract OCR and Russian language data
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP "tesseract-ocr-w64-setup-5.5.3.20260724.exe"
+          Invoke-WebRequest -Uri "https://github.com/tesseract-ocr/tesseract/releases/download/5.5.3/tesseract-ocr-w64-setup-5.5.3.20260724.exe" -OutFile $installer
+          $expectedHash = "BEE9E3434BD94FD65387D9BE28CD467A41F61B1275383B55B0F59A1331270AE4"
+          $actualHash = (Get-FileHash -Path $installer -Algorithm SHA256).Hash
+          if ($actualHash -ne $expectedHash) { throw "Tesseract installer SHA-256 mismatch: $actualHash" }
+          $process = Start-Process -FilePath $installer -ArgumentList "/S" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Tesseract installer failed with exit code $($process.ExitCode)" }
+          $tesseractDir = Join-Path $env:ProgramFiles "Tesseract-OCR"
+          $tesseractExe = Join-Path $tesseractDir "tesseract.exe"
+          $tessdataDir = Join-Path $tesseractDir "tessdata"
+          if (-not (Test-Path $tesseractExe)) { throw "Tesseract executable not found: $tesseractExe" }
+          $rusModel = Join-Path $tessdataDir "rus.traineddata"
+          Invoke-WebRequest -Uri "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/87416418657359cb625c412a48b6e1d6d41c29bd/rus.traineddata" -OutFile $rusModel
+          $languages = (& $tesseractExe --list-langs 2>&1) -join [Environment]::NewLine
+          if ($LASTEXITCODE -ne 0 -or $languages -notmatch "(?m)^eng$" -or $languages -notmatch "(?m)^rus$") { throw "Tesseract eng/rus language data is not available: $languages" }
+          "TESSERACT_CMD=$tesseractExe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Build portable desktop application from the hash lock
         env:
           PDF_ANALYST_SKIP_INSTALLER: "1"
