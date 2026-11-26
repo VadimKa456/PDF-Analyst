@@ -149,8 +149,142 @@ def _show_error(title: str, message: str, log_file: Path | None = None) -> None:
         print(f"{title}\n{text}", file=sys.stderr)
 
 
+def _smoke_http_request(
+    base_url: str,
+    path: str,
+    *,
+    method: str = "GET",
+    headers: dict[str, str] | None = None,
+    data: bytes | None = None,
+) -> tuple[int, object, bytes]:
+    """Perform a smoke-test request while retaining non-2xx HTTP responses."""
+    import urllib.error
+    import urllib.request
+
+    request = urllib.request.Request(
+        base_url + path,
+        data=data,
+        headers=headers or {},
+        method=method,
+    )
+    try:
+        response = urllib.request.urlopen(request, timeout=8)
+    except urllib.error.HTTPError as exc:
+        response = exc
+    with response:
+        return int(response.status), response.headers, response.read()
+
+
+def _run_headless_smoke(url: str, server: object) -> None:
+    """Exercise the packaged desktop server without starting a GUI/WebView."""
+    import json
+    from http.cookies import SimpleCookie
+    from urllib.parse import urlsplit
+
+    from backend.app.desktop_security import SESSION_COOKIE_NAME
+
+    parsed = urlsplit(url)
+    if parsed.scheme != "http" or parsed.hostname != "127.0.0.1":
+        raise RuntimeError(f"Desktop listener is not loopback-only: {url!r}")
+
+    # Inspect Uvicorn's actual listening sockets, not only the URL used by the launcher.
+    bound_addresses: set[str] = set()
+    for http_server in (getattr(server, "servers", None) or []):
+        for listener in (http_server.sockets or []):
+            bound_addresses.add(str(listener.getsockname()[0]))
+    if not bound_addresses or bound_addresses != {"127.0.0.1"}:
+        raise RuntimeError(
+            f"Desktop API has unexpected bound addresses: {sorted(bound_addresses)}"
+        )
+
+    status, _, _ = _smoke_http_request(
+        url,
+        "/api/health",
+        headers={"Sec-Fetch-Site": "same-origin"},
+    )
+    if status != 401:
+        raise RuntimeError(f"Unauthenticated API request returned {status}, expected 401")
+
+    status, headers, html = _smoke_http_request(
+        url,
+        "/",
+        headers={
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Site": "none",
+        },
+    )
+    if status != 200:
+        raise RuntimeError(f"Desktop document navigation returned HTTP {status}")
+
+    cookie = SimpleCookie()
+    cookie.load(headers.get("Set-Cookie", ""))
+    morsel = cookie.get(SESSION_COOKIE_NAME)
+    if morsel is None:
+        raise RuntimeError("Top-level navigation did not establish the desktop session cookie")
+    if not morsel["httponly"] or morsel["samesite"].lower() != "strict":
+        raise RuntimeError("Desktop session cookie is missing HttpOnly or SameSite=Strict")
+    if morsel["path"] != "/":
+        raise RuntimeError("Desktop session cookie has an unexpected path")
+    if morsel.value.encode("utf-8") in html:
+        raise RuntimeError("Desktop session secret leaked into the HTML response")
+    cookie_header = f"{SESSION_COOKIE_NAME}={morsel.value}"
+
+    status, _, health_body = _smoke_http_request(
+        url,
+        "/api/health",
+        headers={
+            "Cookie": cookie_header,
+            "Origin": url,
+            "Sec-Fetch-Site": "same-origin",
+        },
+    )
+    if status != 200 or json.loads(health_body.decode("utf-8")).get("status") != "ok":
+        raise RuntimeError(f"Authenticated health request failed with HTTP {status}")
+
+    status, _, _ = _smoke_http_request(
+        url,
+        "/api/health",
+        headers={"Host": "attacker.invalid", "Cookie": cookie_header},
+    )
+    if status != 421:
+        raise RuntimeError(f"Unexpected Host header returned {status}, expected 421")
+
+    status, _, _ = _smoke_http_request(
+        url,
+        "/api/settings",
+        method="PUT",
+        headers={
+            "Cookie": cookie_header,
+            "Origin": "https://attacker.invalid",
+            "Sec-Fetch-Site": "same-origin",
+            "Content-Type": "application/json",
+        },
+        data=b"{}",
+    )
+    if status != 403:
+        raise RuntimeError(f"Cross-origin settings update returned {status}, expected 403")
+
+    status, _, _ = _smoke_http_request(
+        url,
+        "/api/health",
+        headers={
+            "Cookie": f"{SESSION_COOKIE_NAME}=invalid",
+            "Sec-Fetch-Site": "same-origin",
+        },
+    )
+    if status != 401:
+        raise RuntimeError(f"Invalid session cookie returned {status}, expected 401")
+
+    logging.getLogger("pdf-analyst.desktop").info(
+        "Headless packaged smoke passed; bound=%s, session, Host and Origin checks verified",
+        sorted(bound_addresses),
+    )
+
+
 def main() -> int:
     multiprocessing.freeze_support()
+    headless_smoke = "--headless-smoke" in sys.argv[1:]
     _setup_paths()
     log_file = _configure_logging()
     logger = logging.getLogger("pdf-analyst.desktop")
@@ -161,12 +295,13 @@ def main() -> int:
         from backend.app.main import app as fastapi_app
     except Exception as exc:
         logger.exception("Import failed")
-        _show_error(
-            "PDF Analyst — ошибка запуска",
-            "Не удалось загрузить приложение.\n"
-            f"{exc}\n\n{traceback.format_exc(limit=3)}",
-            log_file,
-        )
+        if not headless_smoke:
+            _show_error(
+                "PDF Analyst — ошибка запуска",
+                "Не удалось загрузить приложение.\\n"
+                f"{exc}\\n\\n{traceback.format_exc(limit=3)}",
+                log_file,
+            )
         return 1
 
     # Keep the authenticated desktop listener loopback-only; ignore HOST overrides.
@@ -214,15 +349,17 @@ def main() -> int:
 
     if not _wait_server(url, session_token, timeout=60.0):
         logger.error("Server did not start at %s", url)
-        _show_error(
-            "PDF Analyst — ошибка запуска",
-            "Локальный сервер не запустился вовремя.",
-            log_file,
-        )
         try:
             server.should_exit = True
+            thread.join(timeout=10)
         except Exception:
             pass
+        if not headless_smoke:
+            _show_error(
+                "PDF Analyst — ошибка запуска",
+                "Локальный сервер не запустился вовремя.",
+                log_file,
+            )
         return 1
 
     logger.info("Server ready at %s", url)
@@ -238,6 +375,21 @@ def main() -> int:
             jobs.shutdown()
         except Exception:
             pass
+
+    if headless_smoke:
+        smoke_exit = 0
+        try:
+            _run_headless_smoke(url, server)
+        except Exception:
+            logger.exception("Packaged desktop headless smoke failed")
+            smoke_exit = 1
+        finally:
+            _shutdown()
+            thread.join(timeout=15)
+            if thread.is_alive():
+                logger.error("Desktop API server did not shut down after headless smoke")
+                smoke_exit = 1
+        return smoke_exit
 
     # Пытаемся открыть как desktop-окно (без браузера).
     try:
