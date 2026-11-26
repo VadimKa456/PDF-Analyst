@@ -15,7 +15,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 ROOT_DIR = BACKEND_DIR.parent
-SAMPLES_DIR = ROOT_DIR / "samples" / "pdfs"
+SAMPLES_DIR = Path(os.environ.get("PDF_ANALYST_SAMPLES_DIR", str(ROOT_DIR / "samples" / "pdfs"))).resolve()
 
 
 def make_document(doc_id: int, name: str) -> SimpleNamespace:
