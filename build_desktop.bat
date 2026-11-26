@@ -46,7 +46,7 @@ if not exist "frontend\dist\index.html" (
     exit /b 1
   )
   pushd frontend
-  call "%NPM_CMD%" install
+  call "%NPM_CMD%" ci
   call "%NPM_CMD%" run build
   popd
 ) else (
