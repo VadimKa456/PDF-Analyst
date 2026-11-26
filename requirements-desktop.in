@@ -1,0 +1,6 @@
+# Windows x64 / CPython 3.12 release-build inputs.
+# Generate the exact, hash-locked requirements-desktop-lock.txt with:
+#   python -m pip install pip==26.3 pip-tools==7.7.0
+#   python -m piptools compile --resolver=backtracking --generate-hashes --allow-unsafe --output-file=requirements-desktop-lock.txt requirements-desktop.in
+-r requirements.txt
+-r requirements-desktop.txt
