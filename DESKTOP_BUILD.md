@@ -111,6 +111,20 @@ cd frontend && npm ci && npm run build && cd ..
 
 `onefile = True` создаёт один исполняемый файл, но увеличивает время запуска и может требовать дополнительной настройки исключений антивируса.
 
+## SBOM и сторонние лицензии
+
+При выполнении `build_desktop.bat` в `dist/PDF Analyst/compliance/` создаются
+CycloneDX JSON-инвентари Python-окружения и frontend lockfile, снимок
+`pip freeze --all`, список объявленных лицензий и доступные тексты notices.
+Каталог включается в установщик рекурсивным правилом Inno Setup. Если
+`frontend/node_modules` отсутствует, npm SBOM всё равно строится из
+`package-lock.json`, но тексты frontend-лицензий могут не скопироваться.
+
+Это фиксирует фактические версии на момент сборки, но не заменяет lock-файл
+Python-зависимостей и не подтверждает юридическую совместимость. Обязательно
+прочитайте [LICENSING_REVIEW.md](docs/LICENSING_REVIEW.md) и
+`compliance/THIRD_PARTY_NOTICES.md` перед коммерческим распространением.
+
 ## Проверка после сборки
 
 1. Запустите `dist\PDF Analyst\PDF Analyst.exe`.
