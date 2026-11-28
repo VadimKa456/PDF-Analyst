@@ -27,9 +27,9 @@ No customer documents or personal data were used.
 | T09 — executive summary | STATIC REVIEW ONLY | Output instructions prioritize decision-relevant findings. No agent interaction executed. |
 | T10 — mismatched reporting periods | STATIC REVIEW ONLY | Protocol requires period/scope alignment before comparison. No agent interaction executed. |
 
-## CI and package build — latest PR head
+## CI and package build — latest full CI run
 
-Verified against PR #3 head commit `5e41dd0bcc9a7d1ede51fc5201ed166efd477241`:
+Verified against code/fixture commit `5e41dd0bcc9a7d1ede51fc5201ed166efd477241` (the latest full CI run at the time of this log update):
 - Latest GitHub Actions run: [46144382515, CI #148](https://github.com/VadimKa456/PDF-Analyst/actions/runs/46144382515) — **success**.
 - Backend pytest — success.
 - Frontend typecheck and build — success.
@@ -41,6 +41,7 @@ Verified against PR #3 head commit `5e41dd0bcc9a7d1ede51fc5201ed166efd477241`:
 - The package artifact was downloaded and the inner distributable ZIP independently inspected. It contains `PDF-Evidence-Analyst/SKILL.md` and the three text references (`analysis-protocol.md`, `quality-checklist.md`, `report-template.md`).
 - The acceptance run sheet was synchronized with the actual fixture properties, including T01's plain-text layout and T07's missing printed page numbering.
 - Follow-up commits document Agensi's text-only package delivery constraint and single-agent-per-account connection caution.
+- A subsequent documentation-only commit updates this validation log; it does not change application code, Skill instructions or fixtures. No new CI run was returned for that documentation-only commit.
 
 The fixture ZIP was independently inspected: it contains 12 PDFs plus `manifest.json`; all 12 PDFs open with PyMuPDF. T04 is one page with zero selectable text and one embedded image. T07 is a two-page PDF whose printed numbering jumps from page 1 of 3 to page 3 of 3. This confirms fixture integrity, not AI-agent behavior.
 
