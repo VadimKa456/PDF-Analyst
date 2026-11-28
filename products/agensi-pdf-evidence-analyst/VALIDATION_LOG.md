@@ -40,6 +40,10 @@ Verified against PR #3 head commit `b41834fb0fa9765ce9be944e46cc51c959792ed7`:
 
 This confirms the current branch builds and packages successfully. It does not validate the Skill's behavior when executed by an AI agent.
 
+## Reproducible fixture set
+
+A deterministic generator and fixture map have now been added under `tests/fixtures/`. It produces 12 synthetic PDFs covering T01–T04 and T06–T10; T05 reuses the image-only T04 scan in a runtime with OCR and image inspection disabled. The CI workflow now includes a separate Windows job to generate, structurally verify and upload this fixture set. This is a new automated fixture-validation step; its result is pending the workflow run on the updated PR head. The generator's checks validate PDF contents and image-only scan properties, not agent behaviour.
+
 ## Interpretation
 
 - The local checks demonstrate that representative synthetic PDF fixtures can expose the values, units, version differences, scanned-page condition and embedded instruction needed for the corresponding scenarios.
