@@ -44,7 +44,7 @@ def make_scan(path: Path) -> None:
     except OSError:
         font, small = ImageFont.load_default(), ImageFont.load_default()
     draw.text((120, 150), "NORTHWIND SAMPLE COMPANY", fill="black", font=font)
-    draw.text((120, 280), "Operating Statement — Synthetic", fill="black", font=small)
+    draw.text((120, 280), "Operating Statement - Synthetic", fill="black", font=small)
     draw.line((120, 370, 1120, 370), fill="black", width=3)
     draw.text((120, 470), "Operating costs", fill="black", font=font)
     draw.text((900, 470), "742", fill="black", font=font)
