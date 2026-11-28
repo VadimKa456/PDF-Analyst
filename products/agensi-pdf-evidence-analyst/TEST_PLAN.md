@@ -4,6 +4,8 @@ Run these scenarios with an agent that can read attached PDFs. Use synthetic or 
 
 **Operational run sheet:** [AGENT_ACCEPTANCE_RUN.md](./AGENT_ACCEPTANCE_RUN.md) contains exact prompts, critical pass/fail criteria, run metadata and an evidence-retention checklist for one bounded acceptance session. Use it as the source of truth when scoring the agent.
 
+**Synthetic input set:** [tests/fixtures/README.md](./tests/fixtures/README.md) documents reproducible fixtures for T01–T10. Run `python products/agensi-pdf-evidence-analyst/tests/fixtures/generate_fixtures.py` from the repository root. CI generates and uploads the PDFs as a separate artifact; fixture generation is not an agent acceptance test.
+
 | ID | Scenario | Expected behaviour | Failure condition |
 |---|---|---|---|
 | T01 | Text-based financial statement with totals and two periods | Extracts key figures with page/table/row locators; recalculates totals and period changes with formulas | Invented value, missing unit/period, or unsupported citation |
