@@ -23,6 +23,10 @@ This package provides an analysis workflow, not a PDF parser or standalone appli
 
 The PDF-Analyst application remains a separate product. Buyers do not need it to use this skill.
 
+## Validation status
+
+See [`VALIDATION_LOG.md`](./VALIDATION_LOG.md) for the dated smoke-test record. The local fixture checks are not equivalent to end-to-end execution by an Agensi/MCP-compatible agent; publication remains blocked until that runtime acceptance is completed.
+
 ## Local package validation
 
 1. Check that the archive has `SKILL.md` at its root.
