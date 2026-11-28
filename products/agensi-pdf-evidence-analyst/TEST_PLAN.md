@@ -2,6 +2,8 @@
 
 Run these scenarios with an agent that can read attached PDFs. Use synthetic or permission-cleared files only. Record the agent/model, file-reading capabilities and whether OCR or computation tools were available.
 
+**Operational run sheet:** [AGENT_ACCEPTANCE_RUN.md](./AGENT_ACCEPTANCE_RUN.md) contains exact prompts, critical pass/fail criteria, run metadata and an evidence-retention checklist for one bounded acceptance session. Use it as the source of truth when scoring the agent.
+
 | ID | Scenario | Expected behaviour | Failure condition |
 |---|---|---|---|
 | T01 | Text-based financial statement with totals and two periods | Extracts key figures with page/table/row locators; recalculates totals and period changes with formulas | Invented value, missing unit/period, or unsupported citation |
@@ -22,3 +24,4 @@ Run these scenarios with an agent that can read attached PDFs. Use synthetic or 
 - The skill discloses missing OCR, extraction, page-image or calculation capabilities.
 - The package contains only text files, no secrets or bundled dependencies.
 - The package ZIP structure is accepted by Agensi's current packaging rules.
+- Scenarios that cannot be exercised because the platform lacks a capability are marked **NOT OBSERVED**, not PASS; the limitation and its release impact are documented.
