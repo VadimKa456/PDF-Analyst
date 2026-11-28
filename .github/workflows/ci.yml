@@ -40,3 +40,40 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run build
+
+  agensi-package:
+    name: Agensi Skill package (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and validate Agensi ZIP
+        shell: pwsh
+        run: ./products/agensi-pdf-evidence-analyst/build-package.ps1
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-evidence-analyst-agensi-v1.0.0
+          path: dist/PDF-Evidence-Analyst-Agensi-v1.0.0.zip
+          if-no-files-found: error
+          retention-days: 14
+
+
+  agensi-fixtures:
+    name: Agensi synthetic fixture generation and validation
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install fixture dependencies
+        run: python -m pip install reportlab Pillow PyMuPDF
+      - name: Generate and verify synthetic PDFs
+        run: python products/agensi-pdf-evidence-analyst/tests/fixtures/generate_fixtures.py
+      - name: Upload synthetic fixture set
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdf-evidence-analyst-synthetic-fixtures
+          path: products/agensi-pdf-evidence-analyst/tests/fixtures/generated/
+          if-no-files-found: error
+          retention-days: 14
