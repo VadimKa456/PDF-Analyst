@@ -7,7 +7,7 @@ Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $sourceDir = $PSScriptRoot
-$repoRoot = (Resolve-Path (Join-Path $sourceDir "..\..\..")).Path
+$repoRoot = (Resolve-Path (Join-Path $sourceDir "..\..")).Path
 $distDir = Join-Path $repoRoot "dist"
 $stageRoot = Join-Path $env:TEMP ("pdf-evidence-analyst-" + [guid]::NewGuid().ToString("N"))
 $packageDir = Join-Path $stageRoot "PDF-Evidence-Analyst"
@@ -58,7 +58,7 @@ try {
 
     $archive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
     try {
-        $entries = @($archive.Entries | Where-Object { -not $_.FullName.EndsWith("/") } | ForEach-Object { $_.FullName.Replace("\\", "/") } | Sort-Object)
+        $entries = @($archive.Entries | Where-Object { -not $_.FullName.EndsWith("/") } | ForEach-Object { $_.FullName.Replace([char]92, [char]47) } | Sort-Object)
         $expected = @(
             "PDF-Evidence-Analyst/SKILL.md",
             "PDF-Evidence-Analyst/references/analysis-protocol.md",
