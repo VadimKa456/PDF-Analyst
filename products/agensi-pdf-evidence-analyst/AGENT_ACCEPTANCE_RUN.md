@@ -4,6 +4,8 @@
 
 This is the operational scorecard for one bounded end-to-end acceptance session. It is designed to be copied into an Agensi-compatible agent chat, with the synthetic PDFs attached. Do not mark a scenario PASS from a static review or from inspecting the fixture alone.
 
+**Agensi packaging note:** the skill ZIP contains text instructions and references only. Agensi delivers text files from a skill package; PDFs/images included inside the package are not readable by the buyer's agent. Keep the synthetic PDFs as a separate test corpus and attach them directly to the agent session (or expose them through a supported file-reading tool). If the target agent cannot access an attached PDF, mark the scenario NOT OBSERVED rather than treating that as a skill PASS/FAIL.
+
 ## Run metadata
 
 - Date/time (UTC):
