@@ -41,6 +41,8 @@ Verified against PR #3 head commit `4c68e1f1e04c55cb481dd7820bbe1b25ceeacd17`:
 
 The fixture ZIP was downloaded and independently inspected: it contains 12 PDFs plus `manifest.json`; all 12 PDFs open with PyMuPDF. T04 is one page with zero selectable text and one embedded image. T07 is a two-page PDF whose printed numbering jumps from page 1 of 3 to page 3 of 3. This confirms fixture integrity, not AI-agent behavior.
 
+The Agensi package artifact was also downloaded and inspected. Its actual inner skill ZIP contains `PDF-Evidence-Analyst/SKILL.md` plus the three text references (`analysis-protocol.md`, `quality-checklist.md`, `report-template.md`). The artifact-download wrapper contains that distributable ZIP as one entry; the inner ZIP is the file to upload. Agensi's current packaging documentation says agents receive text files only and cannot read PDFs/images included inside a skill package, so acceptance PDFs must be supplied separately in the agent session. The acceptance run sheet now records this constraint.
+
 ## Reproducible fixture set
 
 A deterministic generator and fixture map are available under `tests/fixtures/`. It produces 12 synthetic PDFs covering T01–T04 and T06–T10; T05 reuses the image-only T04 scan in a runtime with OCR and image inspection disabled. The Windows CI job has now generated, structurally verified and uploaded the fixture set successfully. The downloaded ZIP was independently inspected and contained all 12 PDFs and the manifest. The generator checks validate PDF contents and image-only scan properties, not agent behaviour.
