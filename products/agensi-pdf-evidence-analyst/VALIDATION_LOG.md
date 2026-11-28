@@ -27,21 +27,22 @@ No customer documents or personal data were used.
 | T09 — executive summary | STATIC REVIEW ONLY | Output instructions prioritize decision-relevant findings. No agent interaction executed. |
 | T10 — mismatched reporting periods | STATIC REVIEW ONLY | Protocol requires period/scope alignment before comparison. No agent interaction executed. |
 
-## CI and package build — current PR head
+## CI and package build — latest PR head
 
-Verified against PR #3 head commit `4c68e1f1e04c55cb481dd7820bbe1b25ceeacd17`:
-- GitHub Actions run: [46139553488](https://github.com/VadimKa456/PDF-Analyst/actions/runs/46139553488) — **success**.
+Verified against PR #3 head commit `5e41dd0bcc9a7d1ede51fc5201ed166efd477241`:
+- Latest GitHub Actions run: [46144382515, CI #148](https://github.com/VadimKa456/PDF-Analyst/actions/runs/46144382515) — **success**.
 - Backend pytest — success.
 - Frontend typecheck and build — success.
 - Windows Agensi package build and ZIP validation — success.
 - Synthetic fixture generation, structural verification and artifact upload — success.
-- Agensi package artifact: `pdf-evidence-analyst-agensi-v1.0.0`, 6,179 bytes; SHA-256 `82a87a70136efe41755a00665b7b22a2963ca73103f4df60db635eb282007d49`.
-- Synthetic fixture artifact: `pdf-evidence-analyst-synthetic-fixtures`, 20,407 bytes; SHA-256 `cce28212562c1c83f671c3bedb9340439f34f340d76f617e94684284309da05b`.
-- Both artifacts expire 2026-12-12 according to GitHub.
+- CI artifact `pdf-evidence-analyst-agensi-v1.0.0`: artifact ID `15262784776`, digest `sha256:78f2aaf7922bfb748d0bb9c1d728829e6e0799b56dcd2cc6cee87250f5cd7f5c`.
+- CI artifact `pdf-evidence-analyst-synthetic-fixtures`: artifact ID `15263310760`, digest `sha256:6c0fc86c6076ba0b6298c57d7a9b015c4333454a044924a1e55897d0285e7d19`.
+- Both CI artifacts expire 2026-12-12 according to GitHub.
+- The package artifact was downloaded and the inner distributable ZIP independently inspected. It contains `PDF-Evidence-Analyst/SKILL.md` and the three text references (`analysis-protocol.md`, `quality-checklist.md`, `report-template.md`).
+- The acceptance run sheet was synchronized with the actual fixture properties, including T01's plain-text layout and T07's missing printed page numbering.
+- Follow-up commits document Agensi's text-only package delivery constraint and single-agent-per-account connection caution.
 
-The fixture ZIP was downloaded and independently inspected: it contains 12 PDFs plus `manifest.json`; all 12 PDFs open with PyMuPDF. T04 is one page with zero selectable text and one embedded image. T07 is a two-page PDF whose printed numbering jumps from page 1 of 3 to page 3 of 3. This confirms fixture integrity, not AI-agent behavior.
-
-The Agensi package artifact was also downloaded and inspected. Its actual inner skill ZIP contains `PDF-Evidence-Analyst/SKILL.md` plus the three text references (`analysis-protocol.md`, `quality-checklist.md`, `report-template.md`). The artifact-download wrapper contains that distributable ZIP as one entry; the inner ZIP is the file to upload. Agensi's current packaging documentation says agents receive text files only and cannot read PDFs/images included inside a skill package, so acceptance PDFs must be supplied separately in the agent session. The acceptance run sheet now records this constraint.
+The fixture ZIP was independently inspected: it contains 12 PDFs plus `manifest.json`; all 12 PDFs open with PyMuPDF. T04 is one page with zero selectable text and one embedded image. T07 is a two-page PDF whose printed numbering jumps from page 1 of 3 to page 3 of 3. This confirms fixture integrity, not AI-agent behavior.
 
 ## Reproducible fixture set
 
